@@ -1,157 +1,92 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OnlyFans Team Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body{margin:0;font-family:'Segoe UI',sans-serif;background:#111;color:#f5c518;}
-h1,h2,h3{text-align:center;color:#f5c518;}
-.container{width:90%;margin:auto;padding:20px;}
-.section{margin-bottom:40px;}
-table{width:100%;border-collapse:collapse;}
-th,td{border:1px solid #f5c518;padding:8px;text-align:center;}
-th{background:#222;}
-tr:nth-child(even){background:#1a1a1a;}
-button{background:#f5c518;color:#111;border:none;padding:6px 12px;cursor:pointer;border-radius:4px;transition:0.3s;}
-button:hover{box-shadow:0 0 10px #f5c518;}
-.chart-container{width:100%;height:400px;margin:20px 0;}
-.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);justify-content:center;align-items:center;}
-.modal-content{background:#111;padding:20px;border-radius:8px;width:400px;text-align:center;border:1px solid #f5c518;}
-.close{float:right;cursor:pointer;color:#f5c518;font-size:18px;}
-</style>
+  <title>Admin Dashboard</title>
+  <style>
+    body { font-family: sans-serif; background:#111; color:#fff; padding:20px;}
+    input, button { padding:5px; margin:5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 5px; border: 1px solid #444; text-align: left; }
+    button { cursor: pointer; }
+  </style>
 </head>
 <body>
-
-<div class="container">
-  <h1>OnlyFans Team Dashboard</h1>
-
-  <div class="section">
-    <h2>Команда</h2>
-    <table id="usersTable">
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Отчёты</th>
-          <th>DA%</th>
-          <th>NET%</th>
-          <th>KPI</th>
-          <th>Действие</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <h1>Admin Dashboard</h1>
+  <div>
+    <input id="username" placeholder="Введите username">
+    <button onclick="loadUser()">Load</button>
   </div>
 
-  <div class="section">
-    <h2>Распределение задач</h2>
-    <div class="chart-container"><canvas id="tasksChart"></canvas></div>
+  <div id="feedbackDiv">
+    <h3>Отправить фидбэк</h3>
+    <input id="feedbackUsername" placeholder="Username">
+    <input id="feedbackFrom" placeholder="От кого">
+    <input id="feedbackMessage" placeholder="Сообщение">
+    <button onclick="sendFeedback()">Отправить</button>
   </div>
 
-  <div class="section">
-    <h2>Тепловая карта активности</h2>
-    <div class="chart-container"><canvas id="heatChart"></canvas></div>
-  </div>
+  <div id="reports"></div>
 
-  <div class="section">
-    <h2>Рекомендации</h2>
-    <ul id="recommendations"></ul>
-  </div>
-</div>
+  <script>
+    async function loadUser() {
+      const username = document.getElementById('username').value;
+      if(!username) return alert('Введите username');
 
-<div class="modal" id="feedbackModal">
-  <div class="modal-content">
-    <span class="close" id="closeModal">&times;</span>
-    <h3>Отправить фидбек</h3>
-    <input type="text" id="feedbackUsername" placeholder="Username" style="width:90%;padding:6px;margin:6px 0;">
-    <textarea id="feedbackMessage" placeholder="Сообщение" style="width:90%;padding:6px;margin:6px 0;"></textarea>
-    <button id="sendFeedback">Отправить</button>
-  </div>
-</div>
+      const res = await fetch(`/api/user/${username}`);
+      if(!res.ok) return alert('User not found');
+      const data = await res.json();
 
-<script>
-async function fetchAnalytics(){
-  const res = await fetch('/api/analytics');
-  const data = await res.json();
-  const tbody = document.querySelector("#usersTable tbody");
-  tbody.innerHTML = "";
-  data.users.forEach(u=>{
-    const da = u.da_count && u.total_reports ? (u.da_count/u.total_reports*100).toFixed(1) : 0;
-    const net = u.net_count && u.total_reports ? (u.net_count/u.total_reports*100).toFixed(1) : 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${u.username}</td>
-      <td>${u.total_reports}</td>
-      <td>${da}%</td>
-      <td>${net}%</td>
-      <td>${u.total_reports ? ( (u.da_count/u.total_reports*Object.keys(JSON.parse(u.types_json||{})).length) - u.repeats - (u.net_count/u.total_reports) ).toFixed(2) : 0}</td>
-      <td><button class="feedbackBtn" data-username="${u.username}">Фидбек</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
+      let html = `<h2>${username}</h2>`;
+      html += `<h3>Сегодня</h3>`;
+      html += createTable(data.reportsToday);
+      html += `<h3>Вчера</h3>`;
+      html += createTable(data.reportsYesterday);
+      html += `<h3>Все отчёты</h3>`;
+      html += createTable(data.reports);
 
-  document.querySelectorAll('.feedbackBtn').forEach(btn=>{
-    btn.onclick = ()=>{
-      document.getElementById('feedbackUsername').value = btn.dataset.username;
-      document.getElementById('feedbackModal').style.display = "flex";
+      document.getElementById('reports').innerHTML = html;
     }
-  });
 
-  // График задач
-  const ctx = document.getElementById('tasksChart').getContext('2d');
-  new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels: Object.keys(data.taskCounts),
-      datasets:[{label:'Количество задач', data:Object.values(data.taskCounts), backgroundColor:'#f5c518'}]
-    },
-    options:{plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}}}
-  });
+    function createTable(reports){
+      if(!reports.length) return '<p>Нет отчётов</p>';
+      let html = `<table><tr><th>Сообщение</th><th>Дата</th><th>Статус</th><th>Действие</th></tr>`;
+      reports.forEach(r=>{
+        html += `<tr>
+          <td>${r.message}</td>
+          <td>${new Date(r.date).toLocaleString()}</td>
+          <td>${r.checked ? '✔' : '❌'}</td>
+          <td>
+            ${r.checked ? '' : `<button onclick="markDone(${r.id})">Сделано</button>`}
+          </td>
+        </tr>`;
+      });
+      html += `</table>`;
+      return html;
+    }
 
-  const recList = document.getElementById('recommendations');
-  recList.innerHTML = "";
-  data.recommendations.forEach(r=>{
-    const li = document.createElement('li');
-    li.textContent = r;
-    recList.appendChild(li);
-  });
-}
+    async function markDone(id){
+      await fetch(`/api/report/${id}/done`, {method:'POST'});
+      loadUser();
+    }
 
-async function fetchExtendedAnalytics(){
-  const res = await fetch('/api/extended_analytics');
-  const data = await res.json();
-  const labels = Array.from({length:24},(_,i)=>i+":00");
-  const datasets = [];
-  const usersHeat = {};
-  data.heat.forEach(h=>{
-    if(!usersHeat[h.username]) usersHeat[h.username]=Array(24).fill(0);
-    usersHeat[h.username][h.hour]=h.count;
-  });
-  Object.keys(usersHeat).forEach(u=>{
-    datasets.push({label:u,data:usersHeat[u],borderColor:'#f5c518',backgroundColor:'rgba(245,197,24,0.3)',fill:true});
-  });
+    async function sendFeedback(){
+      const username = document.getElementById('feedbackUsername').value;
+      const from = document.getElementById('feedbackFrom').value;
+      const message = document.getElementById('feedbackMessage').value;
+      if(!username || !message) return alert('Заполните поля');
 
-  const ctxHeat = document.getElementById('heatChart').getContext('2d');
-  new Chart(ctxHeat,{type:'line',data:{labels,datasets},options:{plugins:{legend:{position:'bottom'}}, scales:{y:{beginAtZero:true}}}});
-}
+      await fetch('/api/feedback',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({username,message,from_admin:from})
+      });
+      alert('Фидбэк отправлен!');
+    }
 
-document.getElementById('closeModal').onclick = ()=>{document.getElementById('feedbackModal').style.display="none";}
-
-document.getElementById('sendFeedback').onclick = async ()=>{
-  const username = document.getElementById('feedbackUsername').value;
-  const message = document.getElementById('feedbackMessage').value;
-  if(!username || !message) return alert('Заполните все поля');
-  const res = await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,message,from_admin:"Admin"})});
-  const data = await res.json();
-  if(data.success) alert('Фидбек отправлен!');
-  document.getElementById('feedbackModal').style.display="none";
-  document.getElementById('feedbackMessage').value="";
-}
-
-fetchAnalytics();
-fetchExtendedAnalytics();
-setInterval(()=>{fetchAnalytics();fetchExtendedAnalytics();},60000);
-</script>
+    setInterval(()=>{
+      const username = document.getElementById('username').value;
+      if(username) loadUser();
+    }, 10000); // автообновление каждые 10 секунд
+  </script>
 </body>
 </html>
