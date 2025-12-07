@@ -4,9 +4,9 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import TelegramBot from 'node-telegram-bot-api';
-
 dotenv.config();
+
+import TelegramBot from 'node-telegram-bot-api';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -159,6 +159,8 @@ function addReport(username, message, date){
 }
 
 // ------------------ API ------------------
+
+// Общая аналитика
 app.get('/api/analytics', (req,res)=>{
   const users = db.prepare("SELECT * FROM users").all();
   const taskCounts = {};
@@ -168,11 +170,13 @@ app.get('/api/analytics', (req,res)=>{
   res.json({users, taskCounts, recommendations});
 });
 
+// Тепловая карта активности
 app.get('/api/extended_analytics', (req,res)=>{
   const heat = db.prepare("SELECT username, hour, count FROM activity_heat").all();
   res.json({heat});
 });
 
+// Информация о пользователе
 app.get('/api/user/:username', (req,res)=>{
   const username = req.params.username;
   const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
@@ -182,42 +186,59 @@ app.get('/api/user/:username', (req,res)=>{
   res.json({user,reports,kpi});
 });
 
-app.post('/api/feedback', (req,res)=>{
-  const {username,message,from_admin} = req.body;
-  if(!username||!message) return res.status(400).json({error:"Missing fields"});
-  db.prepare("INSERT INTO feedback(username,message,from_admin,date,delivered) VALUES(?,?,?,?,0)")
-    .run(username,message,from_admin,new Date().toISOString());
+// Получить отчёты за конкретный день
+app.get('/api/user/:username/reports', (req,res)=>{
+  const username = req.params.username;
+  const date = req.query.date; // YYYY-MM-DD
+  const reports = db.prepare(`
+    SELECT * FROM reports
+    WHERE username = ?
+      AND date(date) = ?
+    ORDER BY date DESC
+  `).all(username, date);
+  res.json({reports});
+});
+
+// Обновление статуса отчёта (сделал / наврал)
+app.post('/api/report/:id/status', (req,res)=>{
+  const id = req.params.id;
+  const {status} = req.body; // "done" или "fake"
+  db.prepare("UPDATE reports SET checked=? WHERE id=?").run(status,id);
+  res.json({success:true});
+});
+
+// Отправка фидбэка
+app.post('/api/feedback/:reportId', (req,res)=>{
+  const reportId = req.params.reportId;
+  const {message} = req.body;
+  const report = db.prepare("SELECT username FROM reports WHERE id=?").get(reportId);
+  if(!report) return res.status(404).json({error:"Report not found"});
+
+  const username = report.username;
+  db.prepare(`INSERT INTO feedback(username,message,from_admin,date,delivered) VALUES(?,?,?,?,0)`)
+    .run(username, message, "admin", new Date().toISOString());
+
+  // Отправляем в Telegram
+  if(global.bot){
+    global.bot.sendMessage(username, `Фидбэк от администратора: ${message}`);
+    db.prepare(`UPDATE feedback SET delivered=1 WHERE username=? AND message=?`).run(username,message);
+  }
+
   res.json({success:true});
 });
 
 // ------------------ Telegram Bot ------------------
-if(!process.env.BOT_TOKEN || !process.env.BOT_ADMIN_ID){
-  console.error("Не заданы BOT_TOKEN или BOT_ADMIN_ID в .env");
-} else {
-  const bot = new TelegramBot(process.env.BOT_TOKEN,{polling:true});
-  const botAdmin = process.env.BOT_ADMIN_ID;
-
-  bot.sendMessage(botAdmin, '🤖 Бот успешно запущен!');
-
-  bot.onText(/\/start/, (msg)=>{
-    bot.sendMessage(msg.chat.id, `Привет! Твой ID: ${msg.chat.id}`);
-  });
-
-  bot.onText(/\/ping/, (msg)=>{
-    bot.sendMessage(msg.chat.id, 'Pong 🏓');
-  });
-
-  bot.on('message', msg=>{
-    if(msg.text && !msg.text.startsWith('/')){ // все обычные сообщения
-      const username = msg.from.username || msg.from.first_name || "unknown";
-      const text = msg.text;
-      const date = new Date().toISOString();
-      addReport(username, text, date);
-      bot.sendMessage(msg.chat.id, `Принял сообщение: "${text}"`);
-    }
+if(process.env.BOT_TOKEN){
+  global.bot = new TelegramBot(process.env.BOT_TOKEN, {polling:true});
+  global.bot.on('message', msg=>{
+    const username = msg.from.username || msg.from.first_name || "unknown";
+    const text = msg.text;
+    const date = new Date().toISOString();
+    addReport(username, text, date);
+    global.bot.sendMessage(msg.chat.id, `Принял сообщение: "${text}"`);
   });
 }
 
 // ------------------ Запуск ------------------
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, ()=>console.log(`Server running on port ${PORT}`));
+app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
