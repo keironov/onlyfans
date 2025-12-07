@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import bodyParser from 'body-parser';
 import TelegramBot from 'node-telegram-bot-api';
@@ -11,18 +10,29 @@ app.use(express.static('public'));
 
 const TELEGRAM_TOKEN = process.env.BOT_TOKEN || "8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI";
 
-// Используем polling (проще на Render)
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+// Инициализация бота без polling
+const bot = new TelegramBot(TELEGRAM_TOKEN);
+
+// ------------------ Настройка WebHook ------------------
+const WEBHOOK_URL = `https://onlyfans-2liu.onrender.com/bot${TELEGRAM_TOKEN}`;
+await bot.setWebHook(WEBHOOK_URL);
+console.log("Webhook установлен:", WEBHOOK_URL);
 
 // ------------------ Помощники ------------------
 function autoNotice(chatId, message){
-  const notice = `⚠️ Авто-замечание: отчет подозрительный или короткий. Пожалуйста, уточни детали.`;
+  const notice = `⚠️ Авто-замечание: отчет подозрительный или слишком короткий. Пожалуйста, напиши подробнее.`;
   bot.sendMessage(chatId, notice).catch(console.log);
   addFeedback(chatId, "system", notice);
 }
 
-// ------------------ Telegram бот ------------------
-bot.on("message", async (msg) => {
+// ------------------ WebHook обработчик ------------------
+app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// ------------------ Логика бота ------------------
+bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const username = msg.from.username || msg.from.first_name || "unknown";
   const text = msg.text || "";
@@ -34,7 +44,7 @@ bot.on("message", async (msg) => {
   const row = db.prepare("SELECT suspicious FROM reports WHERE username=? ORDER BY id DESC LIMIT 1").get(username);
   const suspicious = row ? row.suspicious : 0;
 
-  if(suspicious) autoNotice(chatId, text);
+  if (suspicious) autoNotice(chatId, text);
 
   bot.sendMessage(chatId, `Отчет принят!${suspicious ? " ⚠️ Подозрительный" : ""}`);
 });
@@ -50,15 +60,19 @@ app.get('/api/analytics', (req,res)=>{
   users.forEach(u=>{
     const types = u.types_json ? JSON.parse(u.types_json) : {accounts:0, chat:0, to_ig:0};
     Object.keys(types).forEach(k=> taskCounts[k] += types[k]);
-    if((types.accounts||0) > (types.to_ig||0)*4) recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
-    if(u.avg_length < 30) recommendations.push(`${u.username}: короткие отчеты — просить подробнее`);
-    if(u.net_count > u.da_count) recommendations.push(`${u.username}: качество отчетов низкое`);
+
+    if((types.accounts||0) > (types.to_ig||0)*4)
+      recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
+    if(u.avg_length < 30)
+      recommendations.push(`${u.username}: короткие отчеты — просить подробнее`);
+    if(u.net_count > u.da_count)
+      recommendations.push(`${u.username}: качество отчетов низкое`);
   });
 
   res.json({users, taskCounts, recommendations});
 });
 
-// 2. Расширенная аналитика + KPI
+// 2. Расширенная аналитика
 app.get('/api/extended_analytics', (req,res)=>{
   const heat = getActivityHeat();
   const users = getUsers().map(u=>{
@@ -76,9 +90,12 @@ app.get('/api/extended_analytics', (req,res)=>{
 
   const recommendations = [];
   users.forEach(u=>{
-    if((u.types.accounts||0) > (u.types.to_ig||0)*4) recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
-    if(u.avg_length<30) recommendations.push(`${u.username}: короткие отчеты — просить подробней`);
-    if(u.net_count>u.da_count) recommendations.push(`${u.username}: качество отчетов низкое`);
+    if((u.types.accounts||0) > (u.types.to_ig||0)*4)
+      recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
+    if(u.avg_length<30)
+      recommendations.push(`${u.username}: короткие отчеты — просить подробней`);
+    if(u.net_count>u.da_count)
+      recommendations.push(`${u.username}: качество отчетов низкое`);
   });
 
   res.json({heat, users, recommendations});
@@ -96,12 +113,12 @@ app.post('/api/feedback', (req,res)=>{
 
   addFeedback(username, from_admin||"Admin", message);
 
-  bot.sendMessage(`@${username}`, `📩 Фидбек от ${from_admin||"Admin"}: ${message}`).catch(console.log);
+  bot.sendMessage(username, `📩 Фидбек от ${from_admin||"Admin"}:\n${message}`).catch(console.log);
 
   res.json({success:true});
 });
 
-// ------------------ Архивирование старых отчетов ------------------
+// ------------------ Архивирование ------------------
 archiveOldReports();
 
 // ------------------ Запуск сервера ------------------
