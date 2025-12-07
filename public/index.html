@@ -1,110 +1,41 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <title>Admin Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family:sans-serif; background:#111; color:#fff; padding:20px;}
-    input, button { padding:5px; margin:5px; }
-    table { width:100%; border-collapse:collapse; margin-top:10px;}
-    th, td { padding:5px; border:1px solid #444; text-align:left; }
-    button { cursor:pointer; }
-    .gold { color:#FFD700; }
-  </style>
+<meta charset="UTF-8">
+<title>Team Dashboard</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body>
-  <h1 class="gold">Admin Dashboard</h1>
+<body class="dark-theme">
+<h1>Team Dashboard</h1>
 
-  <div>
-    <input id="username" placeholder="Username">
-    <button onclick="loadUser()">Load</button>
-  </div>
+<div id="team"></div>
 
-  <div id="feedbackDiv">
-    <h3>Отправить фидбэк</h3>
-    <input id="feedbackUsername" placeholder="Username">
-    <input id="feedbackFrom" placeholder="От кого">
-    <input id="feedbackMessage" placeholder="Сообщение">
-    <button onclick="sendFeedback()">Отправить</button>
-  </div>
+<h2>Feedback</h2>
+<form id="feedbackForm">
+  <input type="text" id="username" placeholder="Username">
+  <input type="text" id="message" placeholder="Сообщение">
+  <button type="submit">Отправить</button>
+</form>
 
-  <div id="userStats"></div>
-  <canvas id="activityChart" width="800" height="200"></canvas>
-  <canvas id="taskChart" width="800" height="200"></canvas>
+<script>
+async function loadTeam() {
+  const res = await fetch('/team');
+  const data = await res.json();
+  const container = document.getElementById('team');
+  container.innerHTML = '<table border="1"><tr><th>Username</th><th>Отчёты</th><th>DA%</th><th>NET%</th></tr>'
+    + data.map(u => `<tr><td>${u.username}</td><td>${u.reports}</td><td>${(u.da*100).toFixed(1)}%</td><td>${(u.net*100).toFixed(1)}%</td></tr>`).join('')
+    + '</table>';
+}
+loadTeam();
 
-  <script>
-    async function loadUser(){
-      const username = document.getElementById('username').value;
-      if(!username) return alert('Введите username');
-
-      const res = await fetch(`/api/user/${username}`);
-      if(!res.ok) return alert('User not found');
-      const data = await res.json();
-
-      let html = `<h2>${username}</h2>`;
-      html += `<p>Отчёты: ${data.user.total_reports}, KPI: ${data.kpi.toFixed(2)}</p>`;
-      html += `<h3>Сегодня</h3>`+createTable(data.reportsToday);
-      html += `<h3>Вчера</h3>`+createTable(data.reportsYesterday);
-      html += `<h3>Все отчёты</h3>`+createTable(data.reports);
-      document.getElementById('userStats').innerHTML = html;
-
-      drawActivity(data.activity);
-      drawTasks(data.user.types_json ? JSON.parse(data.user.types_json) : {});
-    }
-
-    function createTable(reports){
-      if(!reports.length) return '<p>Нет отчётов</p>';
-      let html = `<table><tr><th>Сообщение</th><th>Дата</th><th>Статус</th><th>Действие</th></tr>`;
-      reports.forEach(r=>{
-        html += `<tr>
-          <td>${r.message}</td>
-          <td>${new Date(r.date).toLocaleString()}</td>
-          <td>${r.checked ? '✔' : (r.suspicious?'⚠️':'❌')}</td>
-          <td>${r.checked?'':`<button onclick="markDone(${r.id})">Сделано</button>`}</td>
-        </tr>`;
-      });
-      html += `</table>`;
-      return html;
-    }
-
-    async function markDone(id){
-      await fetch(`/api/report/${id}/done`,{method:'POST'});
-      loadUser();
-    }
-
-    async function sendFeedback(){
-      const username = document.getElementById('feedbackUsername').value;
-      const from = document.getElementById('feedbackFrom').value;
-      const message = document.getElementById('feedbackMessage').value;
-      if(!username || !message) return alert('Заполните поля');
-
-      await fetch('/api/feedback',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({username,message,from_admin:from})
-      });
-      alert('Фидбэк отправлен!');
-    }
-
-    function drawActivity(activity){
-      const ctx = document.getElementById('activityChart').getContext('2d');
-      const labels = [...Array(24).keys()];
-      const dataHours = labels.map(h=>{
-        const sum = activity.filter(a=>a.hour===h).reduce((acc,v)=>acc+v.count,0);
-        return sum;
-      });
-      new Chart(ctx,{type:'line',data:{labels, datasets:[{label:'Активность по часам', data:dataHours, borderColor:'#FFD700', backgroundColor:'rgba(255,215,0,0.2)'}]}});
-    }
-
-    function drawTasks(types){
-      const ctx = document.getElementById('taskChart').getContext('2d');
-      new Chart(ctx,{type:'bar',data:{labels:Object.keys(types), datasets:[{label:'Задачи', data:Object.values(types), backgroundColor:'#FFD700'}]}});
-    }
-
-    setInterval(()=>{
-      const username = document.getElementById('username').value;
-      if(username) loadUser();
-    },10000);
-  </script>
+document.getElementById('feedbackForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const username = document.getElementById('username').value;
+  const message = document.getElementById('message').value;
+  await fetch('/feedback',{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,message})});
+  alert('Отправлено');
+});
+</script>
 </body>
 </html>
