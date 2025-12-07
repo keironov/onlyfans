@@ -1,70 +1,189 @@
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import sqlite3pkg from 'sqlite3';
+const sqlite3 = sqlite3pkg.verbose();
 
-// Создаем и открываем подключение к базе данных SQLite
-export const openDatabase = async () => {
-  const db = await open({
-    filename: './database.db', // Файл базы данных
-    driver: sqlite3.Database,
-  });
-  return db;
-};
+const db = new sqlite3.Database('./database.sqlite');
 
-// Функция для выполнения запросов к базе данных
-export const queryDatabase = async (sql, params = []) => {
-  const db = await openDatabase();
-  try {
-    const result = await db.all(sql, params); // Выполнение SQL-запроса
-    return result;
-  } catch (error) {
-    console.error('Ошибка при выполнении запроса:', error);
-    throw error;
-  } finally {
-    await db.close(); // Закрываем подключение
-  }
-};
-
-// Функция для создания таблиц в базе данных
-export const createDatabase = async () => {
-  const db = await openDatabase();
-  try {
-    // Создаем таблицу пользователей
-    await db.run(`
+// === CREATE TABLES ===
+export function init() {
+  db.serialize(() => {
+    db.run(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        telegram_id TEXT UNIQUE,
+        username TEXT UNIQUE,
+        display_name TEXT
       )
     `);
 
-    // Создаем таблицу отчетов
-    await db.run(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        reportText TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        user_id INTEGER,
+        text TEXT,
+        task_type TEXT,
+        length INTEGER,
+        suspicious INTEGER,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
 
-    // Создаем таблицу отзывов
-    await db.run(`
+    db.run(`
       CREATE TABLE IF NOT EXISTS feedback (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        manager TEXT NOT NULL,
-        user TEXT NOT NULL,
-        feedbackText TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        user_id INTEGER,
+        manager_id INTEGER,
+        message TEXT,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(manager_id) REFERENCES users(id)
       )
     `);
+  });
+}
 
-    console.log('База данных успешно создана');
-  } catch (error) {
-    console.error('Ошибка при создании таблиц:', error);
-    throw error;
-  } finally {
-    await db.close();
-  }
-};
+// === HELPERS ===
+
+export function ensureUserByTelegram(telegram_id, username, display) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM users WHERE telegram_id = ?`,
+      [telegram_id],
+      (err, row) => {
+        if (err) return reject(err);
+
+        if (row) {
+          return resolve(row);
+        }
+
+        db.run(
+          `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
+          [telegram_id, username, display],
+          function (err2) {
+            if (err2) return reject(err2);
+            db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
+              e ? reject(e) : resolve(r)
+            );
+          }
+        );
+      }
+    );
+  });
+}
+
+export function getUserByUsername(username) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) =>
+      err ? reject(err) : resolve(row)
+    );
+  });
+}
+
+export function listUsers() {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT * FROM users ORDER BY id DESC`, (err, rows) =>
+      err ? reject(err) : resolve(rows)
+    );
+  });
+}
+
+export function addReport({ user_id, text, created_at }) {
+  return new Promise((resolve, reject) => {
+    const length = text.length;
+    const suspicious = length < 5 ? 1 : 0;
+    const task_type = length < 20 ? 'short' : 'long';
+
+    db.run(
+      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [user_id, text, task_type, length, suspicious, created_at],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM reports WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listReports(limit = 1000) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT reports.*, users.username 
+       FROM reports 
+       LEFT JOIN users ON users.id = reports.user_id
+       ORDER BY reports.id DESC 
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function listReportsForUser(user_id, limit = 200) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM reports WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
+      [user_id, limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function summaryForUser(user_id) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         COUNT(*) AS total,
+         SUM(length) AS total_length,
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious
+       FROM reports
+       WHERE user_id = ?`,
+      [user_id],
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+export function addFeedback({ user_id, manager_id, message, created_at }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO feedback (user_id, manager_id, message, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [user_id, manager_id, message, created_at],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM feedback WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listFeedback() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT feedback.*, u.username AS user_name, m.username AS manager_name
+       FROM feedback
+       LEFT JOIN users u ON u.id = feedback.user_id
+       LEFT JOIN users m ON m.id = feedback.manager_id
+       ORDER BY feedback.id DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function globalSummary() {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         COUNT(*) AS reports_total,
+         SUM(length) AS total_length,
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
+       FROM reports`,
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
