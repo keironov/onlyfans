@@ -8,34 +8,32 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-const TELEGRAM_TOKEN = process.env.BOT_TOKEN || "8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI";
-
-// Инициализация бота без polling
-const bot = new TelegramBot(TELEGRAM_TOKEN);
-
-// ------------------ Настройка WebHook ------------------
+const TELEGRAM_TOKEN = process.env.BOT_TOKEN || '8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI';
 const WEBHOOK_URL = `https://onlyfans-2liu.onrender.com/bot${TELEGRAM_TOKEN}`;
+
+// Создаем бота в режиме WebHook (polling=false)
+const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+
+// Устанавливаем WebHook
 await bot.setWebHook(WEBHOOK_URL);
-console.log("Webhook установлен:", WEBHOOK_URL);
+console.log('Webhook установлен:', WEBHOOK_URL);
 
-// ------------------ Помощники ------------------
-function autoNotice(chatId, message){
-  const notice = `⚠️ Авто-замечание: отчет подозрительный или слишком короткий. Пожалуйста, напиши подробнее.`;
-  bot.sendMessage(chatId, notice).catch(console.log);
-  addFeedback(chatId, "system", notice);
-}
-
-// ------------------ WebHook обработчик ------------------
-app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
+// ------------------ Telegram WebHook ------------------
+app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
+  try {
+    await bot.processUpdate(req.body);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
 });
 
 // ------------------ Логика бота ------------------
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
-  const username = msg.from.username || msg.from.first_name || "unknown";
-  const text = msg.text || "";
+  const username = msg.from.username || msg.from.first_name || 'unknown';
+  const text = msg.text || '';
   const date = new Date().toISOString();
 
   addUser(username);
@@ -44,14 +42,17 @@ bot.on('message', async (msg) => {
   const row = db.prepare("SELECT suspicious FROM reports WHERE username=? ORDER BY id DESC LIMIT 1").get(username);
   const suspicious = row ? row.suspicious : 0;
 
-  if (suspicious) autoNotice(chatId, text);
+  if (suspicious) {
+    const notice = `⚠️ Авто-замечание: отчет подозрительный или слишком короткий. Пожалуйста, напиши подробнее.`;
+    bot.sendMessage(chatId, notice).catch(console.log);
+    addFeedback(username, 'system', notice);
+  }
 
-  bot.sendMessage(chatId, `Отчет принят!${suspicious ? " ⚠️ Подозрительный" : ""}`);
+  bot.sendMessage(chatId, `Отчет принят!${suspicious ? ' ⚠️ Подозрительный' : ''}`);
 });
 
 // ------------------ API для фронтенда ------------------
-
-// 1. Основная аналитика
+// Основная аналитика
 app.get('/api/analytics', (req,res)=>{
   const users = getUsers();
   const taskCounts = {accounts:0, chat:0, to_ig:0};
@@ -72,7 +73,7 @@ app.get('/api/analytics', (req,res)=>{
   res.json({users, taskCounts, recommendations});
 });
 
-// 2. Расширенная аналитика
+// Расширенная аналитика
 app.get('/api/extended_analytics', (req,res)=>{
   const heat = getActivityHeat();
   const users = getUsers().map(u=>{
@@ -101,18 +102,17 @@ app.get('/api/extended_analytics', (req,res)=>{
   res.json({heat, users, recommendations});
 });
 
-// 3. Последние отчеты
+// Последние отчеты
 app.get('/api/reports', (req,res)=>{
   res.json(getReports());
 });
 
-// 4. Фидбек
+// Фидбек
 app.post('/api/feedback', (req,res)=>{
   const {username, message, from_admin} = req.body;
   if(!username || !message) return res.json({success:false});
 
   addFeedback(username, from_admin||"Admin", message);
-
   bot.sendMessage(username, `📩 Фидбек от ${from_admin||"Admin"}:\n${message}`).catch(console.log);
 
   res.json({success:true});
