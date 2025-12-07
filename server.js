@@ -40,7 +40,9 @@ if (BOT_TOKEN && WEBHOOK_URL) {
     (async () => {
       await bot.setWebHook(fullWebhookUrl);
       console.log('Telegram webhook set →', fullWebhookUrl);
-    })().catch(err => console.error('Failed to set webhook:', err?.response?.body || err));
+    })().catch(err => {
+      console.error('Failed to set webhook:', err?.response?.body || err);
+    });
 
     app.post(webhookPath, (req, res) => {
       try {
@@ -77,9 +79,7 @@ if (BOT_TOKEN && WEBHOOK_URL) {
         const rep = await db.addReport({
           user_id: user.id,
           text: msg.text,
-          created_at: Date.now(),
-          source: 'telegram',
-          status: 0 // pending
+          created_at: Date.now()
         });
         await bot.sendMessage(
           msg.chat.id,
@@ -119,6 +119,7 @@ app.get('/api/user/:username', async (req, res) => {
     if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
     const summary = await db.summaryForUser(user.id);
     const reports = await db.listReportsForUser(user.id, 500);
+    // normalize summary keys for frontend
     const normSummary = {
       total: summary.total || 0,
       total_length: summary.total_length || 0,
@@ -130,7 +131,7 @@ app.get('/api/user/:username', async (req, res) => {
   }
 });
 
-// Create report (from UI) — accepts reason
+// Create report (from UI) — UPDATED: accepts `reason`
 app.post('/api/reports', async (req, res) => {
   try {
     const { username, text, reason } = req.body;
@@ -142,42 +143,20 @@ app.post('/api/reports', async (req, res) => {
     const rep = await db.addReport({
       user_id: user.id,
       text,
-      created_at: Date.now(),
-      source: 'web',
-      status: 0 // pending
+      created_at: Date.now()
     });
 
+    // send message to admin in the required format
     if (bot && BOT_ADMIN_ID) {
       const message = `🚨 Ручной Репорт\n\nЮзер: ${username}\nПричина: ${reason}\nТекст: ${text}`;
-      try { await bot.sendMessage(BOT_ADMIN_ID, message); } 
-      catch (err) { console.error('Failed to notify admin via bot:', err?.response?.body || err); }
+      try {
+        await bot.sendMessage(BOT_ADMIN_ID, message);
+      } catch (err) {
+        console.error('Failed to notify admin via bot:', err?.response?.body || err);
+      }
     }
 
     res.json({ ok: true, report: rep });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Pending web reports
-app.get('/api/reports/pending', async (req, res) => {
-  try {
-    const reps = await db.listPendingWebReports(1000);
-    res.json({ ok: true, reports: reps });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Update report status
-app.post('/api/reports/:id/status', async (req, res) => {
-  try {
-    const report_id = req.params.id;
-    const { status } = req.body;
-    if (![0,1,2].includes(Number(status))) return res.status(400).json({ ok: false, error: 'Invalid status' });
-
-    const updated = await db.updateReportStatus(report_id, Number(status));
-    res.json({ ok: true, report: updated });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -187,19 +166,30 @@ app.post('/api/reports/:id/status', async (req, res) => {
 app.post('/api/feedback', async (req, res) => {
   try {
     const { manager_username, to_username, message } = req.body;
-    if (!to_username || !message) return res.status(400).json({ ok: false, error: 'to_username and message required' });
+    if (!to_username || !message)
+      return res.status(400).json({ ok: false, error: 'to_username and message required' });
 
     let manager = manager_username ? await db.getUserByUsername(manager_username) : null;
-    if (!manager && manager_username) manager = await db.ensureUserByTelegram(`web-m-${Date.now()}`, manager_username, manager_username);
+    if (!manager && manager_username)
+      manager = await db.ensureUserByTelegram(`web-m-${Date.now()}`, manager_username, manager_username);
 
     let user = await db.getUserByUsername(to_username);
-    if (!user) user = await db.ensureUserByTelegram(`web-u-${Date.now()}`, to_username, to_username);
+    if (!user)
+      user = await db.ensureUserByTelegram(`web-u-${Date.now()}`, to_username, to_username);
 
-    const f = await db.addFeedback({ user_id: user.id, manager_id: manager ? manager.id : null, message, created_at: Date.now() });
+    const f = await db.addFeedback({
+      user_id: user.id,
+      manager_id: manager ? manager.id : null,
+      message,
+      created_at: Date.now()
+    });
 
     if (bot && user.telegram_id) {
-      try { await bot.sendMessage(user.telegram_id, `Manager feedback: ${message}`); } 
-      catch (err) { console.error('Failed to send feedback to user via bot:', err?.response?.body || err); }
+      try {
+        await bot.sendMessage(user.telegram_id, `Manager feedback: ${message}`);
+      } catch (err) {
+        console.error('Failed to send feedback to user via bot:', err?.response?.body || err);
+      }
     }
 
     res.json({ ok: true, feedback: f });
@@ -212,6 +202,7 @@ app.post('/api/feedback', async (req, res) => {
 app.get('/api/stats/global', async (req, res) => {
   try {
     const s = await db.globalSummary();
+    // try to include leaderboard key if you compute it elsewhere; keep compatibility
     res.json({ ok: true, summary: s });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
