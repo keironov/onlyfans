@@ -1,29 +1,20 @@
 {
   "name": "onlyfans-team-dashboard",
   "version": "1.0.0",
-  "description": "Система управления командой OnlyFans: Telegram бот, аналитика, KPI, фидбек",
-  "main": "server.js",
+  "description": "OnlyFans team dashboard: Telegram bot, analytics, KPI, feedback",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "better-sqlite3": "^8.1.0",
+    "better-sqlite3": "^8.3.0",
     "node-telegram-bot-api": "^0.61.0",
     "body-parser": "^1.20.2",
+    "dotenv": "^16.3.1",
     "chart.js": "^4.4.0"
   },
   "engines": {
     "node": "20.x"
-  },
-  "keywords": [
-    "OnlyFans",
-    "Telegram",
-    "Dashboard",
-    "KPI",
-    "Analytics"
-  ],
-  "author": "Лилия",
-  "license": "MIT"
+  }
 }
