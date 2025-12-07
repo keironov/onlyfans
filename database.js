@@ -3,7 +3,7 @@ const sqlite3 = sqlite3pkg.verbose();
 
 const db = new sqlite3.Database('./database.sqlite');
 
-// === CREATE TABLES ===
+// === CREATE TABLES + columns status/source ===
 export function init() {
   db.serialize(() => {
     db.run(`
@@ -24,6 +24,8 @@ export function init() {
         length INTEGER,
         suspicious INTEGER,
         created_at INTEGER,
+        status INTEGER DEFAULT 0,
+        source TEXT DEFAULT 'telegram',
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -39,35 +41,32 @@ export function init() {
         FOREIGN KEY(manager_id) REFERENCES users(id)
       )
     `);
+
+    // --- добавляем колонки если их нет (без потери данных)
+    db.get("PRAGMA table_info(reports)", (err, rows) => {
+      const cols = (rows||[]).map(r => r.name);
+      if(!cols.includes('status')) db.run("ALTER TABLE reports ADD COLUMN status INTEGER DEFAULT 0");
+      if(!cols.includes('source')) db.run("ALTER TABLE reports ADD COLUMN source TEXT DEFAULT 'telegram'");
+    });
   });
 }
 
 // === HELPERS ===
-
 export function ensureUserByTelegram(telegram_id, username, display) {
   return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT * FROM users WHERE telegram_id = ?`,
-      [telegram_id],
-      (err, row) => {
-        if (err) return reject(err);
+    db.get(`SELECT * FROM users WHERE telegram_id = ?`, [telegram_id], (err, row) => {
+      if (err) return reject(err);
+      if (row) return resolve(row);
 
-        if (row) {
-          return resolve(row);
+      db.run(
+        `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
+        [telegram_id, username, display],
+        function (err2) {
+          if (err2) return reject(err2);
+          db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) => e ? reject(e) : resolve(r));
         }
-
-        db.run(
-          `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
-          [telegram_id, username, display],
-          function (err2) {
-            if (err2) return reject(err2);
-            db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
-              e ? reject(e) : resolve(r)
-            );
-          }
-        );
-      }
-    );
+      );
+    });
   });
 }
 
@@ -87,21 +86,20 @@ export function listUsers() {
   });
 }
 
-export function addReport({ user_id, text, created_at }) {
+// === REPORTS ===
+export function addReport({ user_id, text, created_at, source = 'telegram', status = 0 }) {
   return new Promise((resolve, reject) => {
-    const length = text.length;
+    const length = text ? text.length : 0;
     const suspicious = length < 5 ? 1 : 0;
     const task_type = length < 20 ? 'short' : 'long';
 
     db.run(
-      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [user_id, text, task_type, length, suspicious, created_at],
+      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at, status, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, text, task_type, length, suspicious, created_at, status, source],
       function (err) {
         if (err) return reject(err);
-        db.get(`SELECT * FROM reports WHERE id = ?`, [this.lastID], (e, r) =>
-          e ? reject(e) : resolve(r)
-        );
+        db.get(`SELECT * FROM reports WHERE id = ?`, [this.lastID], (e, r) => e ? reject(e) : resolve(r));
       }
     );
   });
@@ -146,6 +144,7 @@ export function summaryForUser(user_id) {
   });
 }
 
+// === FEEDBACK ===
 export function addFeedback({ user_id, manager_id, message, created_at }) {
   return new Promise((resolve, reject) => {
     db.run(
@@ -154,9 +153,7 @@ export function addFeedback({ user_id, manager_id, message, created_at }) {
       [user_id, manager_id, message, created_at],
       function (err) {
         if (err) return reject(err);
-        db.get(`SELECT * FROM feedback WHERE id = ?`, [this.lastID], (e, r) =>
-          e ? reject(e) : resolve(r)
-        );
+        db.get(`SELECT * FROM feedback WHERE id = ?`, [this.lastID], (e, r) => e ? reject(e) : resolve(r));
       }
     );
   });
@@ -184,6 +181,61 @@ export function globalSummary() {
          SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
        FROM reports`,
       (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+// === WEB REPORTS FUNCTIONS ===
+export function listWebReports(limit = 5) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT reports.*, users.username
+       FROM reports
+       LEFT JOIN users ON users.id = reports.user_id
+       WHERE source = 'web'
+       ORDER BY created_at DESC
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function listPendingWebReports(limit = 1000) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT reports.*, users.username
+       FROM reports
+       LEFT JOIN users ON users.id = reports.user_id
+       WHERE source = 'web' AND status = 0
+       ORDER BY created_at ASC
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function updateReportStatus(report_id, status) {
+  return new Promise((resolve, reject) => {
+    db.run(`UPDATE reports SET status = ? WHERE id = ?`, [status, report_id], function (err) {
+      if (err) return reject(err);
+      db.get(`SELECT * FROM reports WHERE id = ?`, [report_id], (e, r) => e ? reject(e) : resolve(r));
+    });
+  });
+}
+
+export function countByStatusBetween(fromTs, toTs) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT
+         SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS approved,
+         SUM(CASE WHEN status = 2 THEN 1 ELSE 0 END) AS rejected,
+         SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS pending
+       FROM reports
+       WHERE created_at BETWEEN ? AND ?`,
+      [fromTs, toTs],
+      (err, row) => (err ? reject(err) : resolve(row || { approved:0, rejected:0, pending:0 }))
     );
   });
 }
