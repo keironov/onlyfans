@@ -1,142 +1,60 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import TelegramBot from 'node-telegram-bot-api';
-import db, {
-  addUser,
-  addReport,
-  addFeedback,
-  archiveOldReports,
-  computeKPI,
-  getUsers,
-  getReports,
-  getActivityHeat
-} from './database.js';
+import { addUser, addReport, addFeedback, getUsers, getReports } from './database.js';
 
-// ------------------ Настройки ------------------
 const app = express();
-app.use(bodyParser.json());
-app.use(express.static('public'));
+const PORT = process.env.PORT || 10000;
 
-const TELEGRAM_TOKEN = process.env.BOT_TOKEN || "8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI";
+// ------------------ Настройка Telegram ------------------
+const TOKEN = '8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI';
+// Используем webhook, так как на Render лучше не использовать polling
+const bot = new TelegramBot(TOKEN);
+const WEBHOOK_URL = `https://onlyfans-2liu.onrender.com/bot${TOKEN}`;
 
-const bot = new TelegramBot(TELEGRAM_TOKEN, { webHook: true });
-
-const WEBHOOK_URL = `https://onlyfans-2liu.onrender.com/bot${TELEGRAM_TOKEN}`;
 bot.setWebHook(WEBHOOK_URL);
 
-console.log("Webhook установлен:", WEBHOOK_URL);
+// ------------------ Middleware ------------------
+app.use(bodyParser.json());
 
-// ------------------ Помощники ------------------
-function autoNotice(chatId){
-  const notice = `⚠️ Авто-замечание: отчет подозрительный или слишком короткий. Пожалуйста, напиши подробнее.`;
-  bot.sendMessage(chatId, notice).catch(console.log);
-  addFeedback(chatId, "system", notice);
-}
+// ------------------ Обработка входящих запросов от Telegram ------------------
+app.post(`/bot${TOKEN}`, async (req, res) => {
+  const update = req.body;
 
-// ------------------ Telegram WebHook ------------------
-app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
+  if(update.message){
+    const chatId = update.message.chat.id;
+    const username = update.message.from.username || update.message.from.first_name || 'unknown';
+    const message = update.message.text || '';
+    const date = new Date(update.message.date * 1000).toISOString();
+
+    // Добавляем пользователя, если нового
+    addUser(username);
+
+    // Добавляем отчет
+    addReport(username, message, date);
+
+    // Ответ бота
+    await bot.sendMessage(chatId, `Принял твоё сообщение: "${message}"`);
+  }
+
   res.sendStatus(200);
 });
 
-// ------------------ Логика бота ------------------
-bot.on("message", async (msg) => {
-  const chatId = msg.chat.id;
-  const username = msg.from.username || msg.from.first_name || "unknown";
-  const text = msg.text || "";
-  const date = new Date().toISOString();
-
-  addUser(username);
-
-  try {
-    addReport(username, text, date);
-  } catch(e) {
-    console.error("Ошибка при добавлении отчета:", e);
-  }
-
-  // Проверка последнего отчета на подозрительность
-  const row = db.prepare("SELECT suspicious FROM reports WHERE username=? ORDER BY id DESC LIMIT 1").get(username);
-  const suspicious = row ? Number(row.suspicious) : 0;
-
-  if (suspicious) autoNotice(chatId);
-
-  bot.sendMessage(chatId, `Отчет принят!${suspicious ? " ⚠️ Подозрительный" : ""}`);
+// ------------------ Тестовые маршруты ------------------
+app.get('/', (req, res) => {
+  res.send('Server is running!');
 });
 
-// ------------------ API для фронтенда ------------------
-
-// 1. Основная аналитика
-app.get('/api/analytics', (req,res)=>{
-  const users = getUsers();
-  const taskCounts = {accounts:0, chat:0, to_ig:0};
-  const recommendations = [];
-
-  users.forEach(u=>{
-    const types = u.types_json ? JSON.parse(u.types_json) : {accounts:0, chat:0, to_ig:0};
-    Object.keys(types).forEach(k=> taskCounts[k] += types[k]);
-
-    if((types.accounts||0) > (types.to_ig||0)*4)
-      recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
-
-    if(u.avg_length < 30)
-      recommendations.push(`${u.username}: короткие отчеты — просить подробнее`);
-
-    if(u.net_count > u.da_count)
-      recommendations.push(`${u.username}: качество отчетов низкое`);
-  });
-
-  res.json({users, taskCounts, recommendations});
+app.get('/users', (req, res) => {
+  res.json(getUsers());
 });
 
-// 2. Расширенная аналитика
-app.get('/api/extended_analytics', (req,res)=>{
-  const heat = getActivityHeat();
-  const users = getUsers().map(u=>{
-    const types = u.types_json ? JSON.parse(u.types_json) : {accounts:0, chat:0, to_ig:0};
-    const kpi = computeKPI({
-      total_reports: u.total_reports,
-      da_count: u.da_count,
-      net_count: u.net_count,
-      repeats: u.repeats,
-      avg_length: u.avg_length,
-      types
-    });
-    return {...u, types, kpi};
-  });
-
-  const recommendations = [];
-  users.forEach(u=>{
-    if((u.types.accounts||0) > (u.types.to_ig||0)*4)
-      recommendations.push(`${u.username}: много аккаунтов, мало переводов`);
-    if(u.avg_length<30)
-      recommendations.push(`${u.username}: короткие отчеты — просить подробней`);
-    if(u.net_count>u.da_count)
-      recommendations.push(`${u.username}: качество отчетов низкое`);
-  });
-
-  res.json({heat, users, recommendations});
-});
-
-// 3. Последние отчеты
-app.get('/api/reports', (req,res)=>{
+app.get('/reports', (req, res) => {
   res.json(getReports());
 });
 
-// 4. Фидбек
-app.post('/api/feedback', (req,res)=>{
-  const {chatId, message, from_admin} = req.body;
-  if(!chatId || !message) return res.json({success:false});
-
-  addFeedback(chatId, from_admin||"Admin", message);
-
-  bot.sendMessage(chatId, `📩 Фидбек от админа:\n${message}`).catch(console.log);
-
-  res.json({success:true});
-});
-
-// ------------------ Архивирование ------------------
-archiveOldReports();
-
 // ------------------ Запуск сервера ------------------
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, ()=>console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Webhook установлен: ${WEBHOOK_URL}`);
+});
