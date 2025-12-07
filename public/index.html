@@ -1,224 +1,140 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Team Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    :root {
-      --bg: #0f1724;
-      --card: #111827;
-      --muted: #9ca3af;
-      --accent: #f59e0b;
-    }
-    body { margin: 0; font-family: Inter, Arial, Helvetica, sans-serif; background: linear-gradient(180deg, #0b1220, #0f1724); color: #e6eef8; }
-    .wrap { max-width: 1200px; margin: 24px auto; padding: 20px; }
-    .top { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
-    .card { background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01)); border-radius: 12px; padding: 16px; box-shadow: 0 6px 18px rgba(2, 6, 23, 0.6); }
-    .grid { display: grid; grid-template-columns: 1fr 420px; gap: 16px; margin-top: 16px; }
-    .team-list { max-height: 540px; overflow: auto; padding: 8px; }
-    .user-row { display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px dashed rgba(255, 255, 255, 0.03); }
-    .muted { color: var(--muted); font-size: 13px; }
-    input, textarea, select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.04); background: transparent; color: inherit; }
-    button { background: var(--accent); color: #081125; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .small { font-size: 13px; color: var(--muted); }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OnlyFans Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <h1 style="margin:0">Team Dashboard</h1>
-        <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
-      </div>
-      <div>
-        <button id="refreshBtn">Обновить</button>
-      </div>
-    </div>
+  <header>
+    <h1>Табло OnlyFans</h1>
+    <nav>
+      <ul>
+        <li><a href="#report-form">Отчеты</a></li>
+        <li><a href="#feedback-form">Обратная связь</a></li>
+        <li><a href="#global-stats">Статистика</a></li>
+        <li><a href="#user-list">Пользователи</a></li>
+      </ul>
+    </nav>
+  </header>
 
-    <div class="grid">
-      <div>
-        <div class="card">
-          <h3 style="margin-top:0">Global Stats</h3>
-          <div id="globalSummary" class="small muted">Загрузка...</div>
-          <canvas id="leaderboardChart" style="height:220px;margin-top:12px;"></canvas>
-        </div>
+  <main>
+    <section id="report-form">
+      <h2>Отправить отчет</h2>
+      <form id="reportForm">
+        <label for="user">Пользователь:</label>
+        <input type="text" id="user" name="user" required>
+        
+        <label for="reason">Причина:</label>
+        <input type="text" id="reason" name="reason" required>
+        
+        <label for="reportText">Текст отчета:</label>
+        <textarea id="reportText" name="reportText" required></textarea>
+        
+        <button type="submit">Отправить отчет</button>
+      </form>
+      <div id="reportStatus"></div>
+    </section>
 
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin-top:0">Последние отчёты</h3>
-          <div id="reportsList" class="team-list small muted">Загрузка...</div>
-        </div>
+    <section id="feedback-form">
+      <h2>Обратная связь</h2>
+      <form id="feedbackForm">
+        <label for="manager">Менеджер:</label>
+        <input type="text" id="manager" name="manager" required>
+        
+        <label for="feedbackUser">Пользователь:</label>
+        <input type="text" id="feedbackUser" name="feedbackUser" required>
+        
+        <label for="feedbackText">Текст отзыва:</label>
+        <textarea id="feedbackText" name="feedbackText" required></textarea>
+        
+        <button type="submit">Отправить отзыв</button>
+      </form>
+      <div id="feedbackStatus"></div>
+    </section>
 
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin-top:0">Отправить быстрый отчёт</h3>
-          <div style="display:grid;gap:8px">
-            <input id="reportUser" placeholder="пользователь (например: @ivan)" />
-            <textarea id="reportText" rows="3" placeholder="текст отчёта"></textarea>
-            <div style="display:flex;gap:8px">
-              <button id="sendReport">Отправить отчёт</button>
-              <div id="reportResult" class="small muted"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <section id="global-stats">
+      <h2>Глобальная статистика</h2>
+      <button onclick="fetchStats()">Получить статистику</button>
+      <div id="stats"></div>
+    </section>
 
-      <div>
-        <div class="card">
-          <h3 style="margin-top:0">Команда</h3>
-          <div id="teamList" class="team-list small muted">Загрузка...</div>
-        </div>
+    <section id="user-list">
+      <h2>Пользователи</h2>
+      <button onclick="fetchUsers()">Получить пользователей</button>
+      <div id="users"></div>
+    </section>
+  </main>
 
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin-top:0">Обратная связь (отправить пользователю)</h3>
-          <div style="display:grid;gap:8px">
-            <input id="managerUsername" placeholder="ваш username (менеджер)" />
-            <input id="toUsername" placeholder="пользователь для обратной связи (например: @ivan)" />
-            <textarea id="feedbackText" rows="3" placeholder="текст сообщения"></textarea>
-            <div style="display:flex;gap:8px">
-              <button id="sendFeedback">Отправить обратную связь</button>
-              <div id="feedbackResult" class="small muted"></div>
-            </div>
-          </div>
-        </div>
+  <footer>
+    <p>&copy; 2025 OnlyFans Dashboard</p>
+  </footer>
 
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin-top:0">Панель пользователя</h3>
-          <div style="display:grid;gap:8px">
-            <input id="viewUsername" placeholder="пользователь для просмотра (например: @ivan)" />
-            <button id="viewUserBtn">Просмотреть</button>
-            <div id="userSummary" class="small muted">Пользователь не выбран</div>
-            <canvas id="userActivityChart" style="height:180px;margin-top:8px;"></canvas>
-            <div id="userReports" class="small muted"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <script>
+    // Отправка отчета
+    document.getElementById('reportForm').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const user = document.getElementById('user').value;
+      const reason = document.getElementById('reason').value;
+      const reportText = document.getElementById('reportText').value;
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const refreshBtn = document.getElementById('refreshBtn');
-  const sendReportBtn = document.getElementById('sendReport');
-  const sendFeedbackBtn = document.getElementById('sendFeedback');
-  const viewUserBtn = document.getElementById('viewUserBtn');
-
-  // --- Функция для получения статистики ---
-  async function getGlobalStats() {
-    const response = await fetch('/api/stats/global');
-    const data = await response.json();
-    const globalSummary = document.getElementById('globalSummary');
-    globalSummary.innerHTML = `Общее количество отчетов: ${data.totalReports}`;
-  }
-
-  // --- Функция для отображения списка пользователей ---
-  async function getUserList() {
-    const response = await fetch('/api/users');
-    const data = await response.json();
-    const userListContainer = document.getElementById('teamList');
-    userListContainer.innerHTML = ''; // Очистить контейнер
-    data.users.forEach(user => {
-      const userRow = document.createElement('div');
-      userRow.classList.add('user-row');
-      userRow.innerHTML = `<span>@${user.username}</span><span class="muted">${user.telegram_id}</span>`;
-      userListContainer.appendChild(userRow);
+      axios.post('/api/reports', { user, reason, reportText })
+        .then(response => {
+          document.getElementById('reportStatus').textContent = 'Отчет отправлен успешно!';
+        })
+        .catch(error => {
+          document.getElementById('reportStatus').textContent = 'Ошибка при отправке отчета!';
+        });
     });
-  }
 
-  // --- Функция для отправки отчета ---
-  sendReportBtn.addEventListener('click', async () => {
-    const user = document.getElementById('reportUser').value;
-    const reportText = document.getElementById('reportText').value;
+    // Отправка отзыва
+    document.getElementById('feedbackForm').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const manager = document.getElementById('manager').value;
+      const user = document.getElementById('feedbackUser').value;
+      const feedbackText = document.getElementById('feedbackText').value;
 
-    if (user && reportText) {
-      const response = await fetch('/api/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user, reason: 'General Report', reportText })
-      });
+      axios.post('/api/feedback', { manager, user, feedbackText })
+        .then(response => {
+          document.getElementById('feedbackStatus').textContent = 'Отзыв отправлен успешно!';
+        })
+        .catch(error => {
+          document.getElementById('feedbackStatus').textContent = 'Ошибка при отправке отзыва!';
+        });
+    });
 
-      const result = await response.json();
-      const reportResult = document.getElementById('reportResult');
-      if (result.reportSent) {
-        reportResult.innerHTML = 'Отчёт успешно отправлен!';
-        reportResult.style.color = 'green';
-      } else {
-        reportResult.innerHTML = 'Ошибка при отправке отчёта!';
-        reportResult.style.color = 'red';
-      }
+    // Получить глобальную статистику
+    function fetchStats() {
+      axios.get('/api/stats/global')
+        .then(response => {
+          const stats = response.data;
+          document.getElementById('stats').innerHTML = `
+            <p>Общее количество отчетов: ${stats.totalReports}</p>
+          `;
+        })
+        .catch(error => {
+          document.getElementById('stats').textContent = 'Ошибка при получении статистики';
+        });
     }
-  });
 
-  // --- Функция для отправки обратной связи ---
-  sendFeedbackBtn.addEventListener('click', async () => {
-    const manager = document.getElementById('managerUsername').value;
-    const user = document.getElementById('toUsername').value;
-    const feedbackText = document.getElementById('feedbackText').value;
-
-    if (manager && user && feedbackText) {
-      const response = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager, user, feedbackText })
-      });
-
-      const result = await response.json();
-      const feedbackResult = document.getElementById('feedbackResult');
-      if (result.feedbackSent) {
-        feedbackResult.innerHTML = 'Обратная связь успешно отправлена!';
-        feedbackResult.style.color = 'green';
-      } else {
-        feedbackResult.innerHTML = 'Ошибка при отправке обратной связи!';
-        feedbackResult.style.color = 'red';
-      }
+    // Получить список пользователей
+    function fetchUsers() {
+      axios.get('/api/users')
+        .then(response => {
+          const users = response.data.users;
+          let userHtml = '<ul>';
+          users.forEach(user => {
+            userHtml += `<li>${user.name} (${user.email})</li>`;
+          });
+          userHtml += '</ul>';
+          document.getElementById('users').innerHTML = userHtml;
+        })
+        .catch(error => {
+          document.getElementById('users').textContent = 'Ошибка при получении пользователей';
+        });
     }
-  });
-
-  // --- Функция для отображения активности пользователя ---
-  viewUserBtn.addEventListener('click', async () => {
-    const username = document.getElementById('viewUsername').value;
-
-    if (username) {
-      const response = await fetch(`/api/users/${username}`);
-      const data = await response.json();
-      const userSummary = document.getElementById('userSummary');
-      const userActivityChart = document.getElementById('userActivityChart');
-      const userReports = document.getElementById('userReports');
-
-      // Обновляем данные пользователя
-      userSummary.innerHTML = `Данные пользователя: @${data.username}`;
-      userReports.innerHTML = `Количество отчётов: ${data.reports}`;
-
-      // График активности пользователя
-      const ctx = userActivityChart.getContext('2d');
-      const chartData = {
-        labels: data.activities.map(activity => activity.date),
-        datasets: [{
-          label: 'Активность пользователя',
-          data: data.activities.map(activity => activity.count),
-          borderColor: 'rgb(255, 99, 132)',
-          fill: false
-        }]
-      };
-
-      new Chart(ctx, {
-        type: 'line',
-        data: chartData
-      });
-    }
-  });
-
-  // --- Инициализация при загрузке страницы ---
-  getGlobalStats();
-  getUserList();
-
-  // --- Обновление данных по нажатию на кнопку Refresh ---
-  refreshBtn.addEventListener('click', () => {
-    getGlobalStats();
-    getUserList();
-  });
-});
-
-</script>
+  </script>
 </body>
 </html>

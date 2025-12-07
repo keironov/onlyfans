@@ -1,29 +1,70 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 
-// Open a database connection
-async function openDatabase() {
-  return open({
-    filename: './data.db',
-    driver: sqlite3.Database
+// Создаем и открываем подключение к базе данных SQLite
+export const openDatabase = async () => {
+  const db = await open({
+    filename: './database.db', // Файл базы данных
+    driver: sqlite3.Database,
   });
-}
+  return db;
+};
 
-// Query database
-export async function queryDatabase(query, params = []) {
+// Функция для выполнения запросов к базе данных
+export const queryDatabase = async (sql, params = []) => {
   const db = await openDatabase();
-  const result = await db.all(query, params);
-  db.close();
-  return result;
-}
+  try {
+    const result = await db.all(sql, params); // Выполнение SQL-запроса
+    return result;
+  } catch (error) {
+    console.error('Ошибка при выполнении запроса:', error);
+    throw error;
+  } finally {
+    await db.close(); // Закрываем подключение
+  }
+};
 
-// Initialize database schema
-export async function createDatabase() {
+// Функция для создания таблиц в базе данных
+export const createDatabase = async () => {
   const db = await openDatabase();
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT, telegram_id INTEGER);
-    CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY, user TEXT, reason TEXT, reportText TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY, manager TEXT, user TEXT, feedbackText TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-  `);
-  db.close();
-}
+  try {
+    // Создаем таблицу пользователей
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Создаем таблицу отчетов
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        reportText TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Создаем таблицу отзывов
+    await db.run(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        manager TEXT NOT NULL,
+        user TEXT NOT NULL,
+        feedbackText TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('База данных успешно создана');
+  } catch (error) {
+    console.error('Ошибка при создании таблиц:', error);
+    throw error;
+  } finally {
+    await db.close();
+  }
+};
