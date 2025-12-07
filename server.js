@@ -1,10 +1,17 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import TelegramBot from 'node-telegram-bot-api';
 import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
 const db = new Database('database.db');
 
@@ -85,7 +92,7 @@ function classifyTask(message){
   return "other";
 }
 
-function detectSuspicious(username, message){
+function detectSuspicious(message){
   let suspicious = 0;
   if(message.length < 15) suspicious = 1;
   if(message.match(/делал аккаунт(ов)?/gi)) suspicious = 1;
@@ -102,10 +109,21 @@ function updateActivityHeat(username, dateStr){
   else db.prepare("INSERT INTO activity_heat(username,day,hour,count) VALUES(?,?,?,1)").run(username, day, hour);
 }
 
+function computeKPI(user){
+  const total_reports = user.total_reports || 0;
+  const da_percent = total_reports ? (user.da_count/total_reports) : 0;
+  const net_percent = total_reports ? (user.net_count/total_reports) : 0;
+  const types = user.types_json ? JSON.parse(user.types_json) : {accounts:0,chat:0,to_ig:0};
+  const diversity = Object.values(types).filter(v=>v>0).length;
+  const repeats = user.repeats || 0;
+  const kpi = (da_percent * total_reports * diversity) - repeats - net_percent*total_reports;
+  return kpi;
+}
+
 function addReport(username, message, date){
   addUser(username);
   const task_type = classifyTask(message);
-  const {suspicious} = detectSuspicious(username, message);
+  const {suspicious} = detectSuspicious(message);
 
   db.prepare("INSERT INTO reports(username,message,date,task_type,suspicious) VALUES(?,?,?,?,?)")
     .run(username, message, date, task_type, suspicious);
@@ -122,7 +140,7 @@ function addReport(username, message, date){
       total_reports=?, 
       avg_length=?, 
       types_json=?,
-      last_report=?
+      last_report=? 
     WHERE username=?
   `).run(total_reports, avg_length, JSON.stringify(types), date, username);
 
@@ -138,23 +156,51 @@ function addReport(username, message, date){
   updateActivityHeat(username, date);
 }
 
-// ------------------ Telegram Bot ------------------
-const TOKEN = '8543977197:AAGZaAEgv-bXYKMLN3KmuFn15i4geOGBBDI';
-const bot = new TelegramBot(TOKEN, {polling: true});
-
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const username = msg.from.username || msg.from.first_name || "unknown";
-  const text = msg.text;
-  const date = new Date().toISOString();
-
-  // Сохраняем в базу
-  addReport(username, text, date);
-
-  // Отвечаем пользователю
-  bot.sendMessage(chatId, `Принял твоё сообщение: "${text}"`);
+// ------------------ API ------------------
+app.get('/api/analytics', (req,res)=>{
+  const users = db.prepare("SELECT * FROM users").all();
+  const taskCounts = {};
+  db.prepare("SELECT task_type, COUNT(*) AS count FROM reports GROUP BY task_type")
+    .all().forEach(r => taskCounts[r.task_type] = r.count);
+  const recommendations = ["Проверить DA/NET","Сбалансировать задачи","Проверить короткие отчёты"];
+  res.json({users, taskCounts, recommendations});
 });
 
-// ------------------ Express server ------------------
-app.get('/', (req, res) => res.send('Server is running!'));
-app.listen(10000, () => console.log('Server running on port 10000'));
+app.get('/api/extended_analytics', (req,res)=>{
+  const heat = db.prepare("SELECT username, hour, count FROM activity_heat").all();
+  res.json({heat});
+});
+
+app.get('/api/user/:username', (req,res)=>{
+  const username = req.params.username;
+  const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
+  if(!user) return res.status(404).json({error:"User not found"});
+  const reports = db.prepare("SELECT * FROM reports WHERE username=? ORDER BY date DESC LIMIT 100").all(username);
+  const kpi = computeKPI(user);
+  res.json({user,reports,kpi});
+});
+
+app.post('/api/feedback', (req,res)=>{
+  const {username,message,from_admin} = req.body;
+  if(!username||!message) return res.status(400).json({error:"Missing fields"});
+  db.prepare("INSERT INTO feedback(username,message,from_admin,date,delivered) VALUES(?,?,?,?,0)")
+    .run(username,message,from_admin,new Date().toISOString());
+  res.json({success:true});
+});
+
+// ------------------ Telegram Bot (для записи сообщений в базу) ------------------
+import TelegramBot from 'node-telegram-bot-api';
+if(process.env.TELEGRAM_TOKEN){
+  const bot = new TelegramBot(process.env.TELEGRAM_TOKEN,{polling:true});
+  bot.on('message', msg=>{
+    const username = msg.from.username || msg.from.first_name || "unknown";
+    const text = msg.text;
+    const date = new Date().toISOString();
+    addReport(username,text,date);
+    bot.sendMessage(msg.chat.id,`Принял сообщение: "${text}"`);
+  });
+}
+
+// ------------------ Запуск ------------------
+const PORT = process.env.PORT || 10000;
+app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
