@@ -38,7 +38,8 @@ let bot = null;
 
 if (BOT_TOKEN && WEBHOOK_URL) {
   try {
-    bot = new TelegramBot(BOT_TOKEN);
+    bot = new TelegramBot(BOT_TOKEN, { webHook: true });
+
     const webhookPath = '/tg';
     const fullWebhookUrl = WEBHOOK_URL.replace(/\/$/, '') + webhookPath;
 
@@ -58,6 +59,7 @@ if (BOT_TOKEN && WEBHOOK_URL) {
         res.sendStatus(500);
       }
     });
+
 
     // /start handler
     bot.onText(/\/start/, async (msg) => {
