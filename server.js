@@ -164,16 +164,32 @@ app.post('/api/feedback',(req,res)=>{
 });
 
 // --- Telegram bot ---
-if(process.env.BOT_TOKEN){
-  const bot = new TelegramBot(process.env.BOT_TOKEN,{polling:true});
-  bot.on('message', msg=>{
+import TelegramBot from 'node-telegram-bot-api';
+
+if (process.env.BOT_TOKEN && process.env.WEBHOOK_URL) {
+  const bot = new TelegramBot(process.env.BOT_TOKEN);
+
+  // Устанавливаем webhook на сервер
+  bot.setWebHook(`${process.env.WEBHOOK_URL}/bot${process.env.BOT_TOKEN}`);
+
+  // Обрабатываем входящие обновления через POST на сервере
+  app.post(`/bot${process.env.BOT_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body); // передаем обновление боту
+    res.sendStatus(200);
+  });
+
+  console.log(`Telegram bot connected via webhook at ${process.env.WEBHOOK_URL}/bot${process.env.BOT_TOKEN}`);
+
+  // Функция обработки сообщений
+  bot.on('message', msg => {
     const username = msg.from.username || msg.from.first_name || "unknown";
     const text = msg.text;
     const date = new Date().toISOString();
-    addReport(username,text,date);
-    bot.sendMessage(msg.chat.id,`Принял сообщение: "${text}"`);
+    addReport(username, text, date);
+    bot.sendMessage(msg.chat.id, `Принял сообщение: "${text}"`);
   });
 }
+
 
 // --- Запуск ---
 const PORT = process.env.PORT || 10000;
