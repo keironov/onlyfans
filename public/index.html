@@ -2,18 +2,21 @@
 <html>
 <head>
   <title>Admin Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: sans-serif; background:#111; color:#fff; padding:20px;}
+    body { font-family:sans-serif; background:#111; color:#fff; padding:20px;}
     input, button { padding:5px; margin:5px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 5px; border: 1px solid #444; text-align: left; }
-    button { cursor: pointer; }
+    table { width:100%; border-collapse:collapse; margin-top:10px;}
+    th, td { padding:5px; border:1px solid #444; text-align:left; }
+    button { cursor:pointer; }
+    .gold { color:#FFD700; }
   </style>
 </head>
 <body>
-  <h1>Admin Dashboard</h1>
+  <h1 class="gold">Admin Dashboard</h1>
+
   <div>
-    <input id="username" placeholder="Введите username">
+    <input id="username" placeholder="Username">
     <button onclick="loadUser()">Load</button>
   </div>
 
@@ -25,10 +28,12 @@
     <button onclick="sendFeedback()">Отправить</button>
   </div>
 
-  <div id="reports"></div>
+  <div id="userStats"></div>
+  <canvas id="activityChart" width="800" height="200"></canvas>
+  <canvas id="taskChart" width="800" height="200"></canvas>
 
   <script>
-    async function loadUser() {
+    async function loadUser(){
       const username = document.getElementById('username').value;
       if(!username) return alert('Введите username');
 
@@ -37,14 +42,14 @@
       const data = await res.json();
 
       let html = `<h2>${username}</h2>`;
-      html += `<h3>Сегодня</h3>`;
-      html += createTable(data.reportsToday);
-      html += `<h3>Вчера</h3>`;
-      html += createTable(data.reportsYesterday);
-      html += `<h3>Все отчёты</h3>`;
-      html += createTable(data.reports);
+      html += `<p>Отчёты: ${data.user.total_reports}, KPI: ${data.kpi.toFixed(2)}</p>`;
+      html += `<h3>Сегодня</h3>`+createTable(data.reportsToday);
+      html += `<h3>Вчера</h3>`+createTable(data.reportsYesterday);
+      html += `<h3>Все отчёты</h3>`+createTable(data.reports);
+      document.getElementById('userStats').innerHTML = html;
 
-      document.getElementById('reports').innerHTML = html;
+      drawActivity(data.activity);
+      drawTasks(data.user.types_json ? JSON.parse(data.user.types_json) : {});
     }
 
     function createTable(reports){
@@ -54,10 +59,8 @@
         html += `<tr>
           <td>${r.message}</td>
           <td>${new Date(r.date).toLocaleString()}</td>
-          <td>${r.checked ? '✔' : '❌'}</td>
-          <td>
-            ${r.checked ? '' : `<button onclick="markDone(${r.id})">Сделано</button>`}
-          </td>
+          <td>${r.checked ? '✔' : (r.suspicious?'⚠️':'❌')}</td>
+          <td>${r.checked?'':`<button onclick="markDone(${r.id})">Сделано</button>`}</td>
         </tr>`;
       });
       html += `</table>`;
@@ -65,7 +68,7 @@
     }
 
     async function markDone(id){
-      await fetch(`/api/report/${id}/done`, {method:'POST'});
+      await fetch(`/api/report/${id}/done`,{method:'POST'});
       loadUser();
     }
 
@@ -83,10 +86,25 @@
       alert('Фидбэк отправлен!');
     }
 
+    function drawActivity(activity){
+      const ctx = document.getElementById('activityChart').getContext('2d');
+      const labels = [...Array(24).keys()];
+      const dataHours = labels.map(h=>{
+        const sum = activity.filter(a=>a.hour===h).reduce((acc,v)=>acc+v.count,0);
+        return sum;
+      });
+      new Chart(ctx,{type:'line',data:{labels, datasets:[{label:'Активность по часам', data:dataHours, borderColor:'#FFD700', backgroundColor:'rgba(255,215,0,0.2)'}]}});
+    }
+
+    function drawTasks(types){
+      const ctx = document.getElementById('taskChart').getContext('2d');
+      new Chart(ctx,{type:'bar',data:{labels:Object.keys(types), datasets:[{label:'Задачи', data:Object.values(types), backgroundColor:'#FFD700'}]}});
+    }
+
     setInterval(()=>{
       const username = document.getElementById('username').value;
       if(username) loadUser();
-    }, 10000); // автообновление каждые 10 секунд
+    },10000);
   </script>
 </body>
 </html>
