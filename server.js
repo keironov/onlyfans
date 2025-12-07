@@ -4,6 +4,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import TelegramBot from 'node-telegram-bot-api';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -188,19 +190,34 @@ app.post('/api/feedback', (req,res)=>{
   res.json({success:true});
 });
 
-// ------------------ Telegram Bot (для записи сообщений в базу) ------------------
-import TelegramBot from 'node-telegram-bot-api';
-if(process.env.TELEGRAM_TOKEN){
-  const bot = new TelegramBot(process.env.TELEGRAM_TOKEN,{polling:true});
+// ------------------ Telegram Bot ------------------
+if(!process.env.BOT_TOKEN || !process.env.BOT_ADMIN_ID){
+  console.error("Не заданы BOT_TOKEN или BOT_ADMIN_ID в .env");
+} else {
+  const bot = new TelegramBot(process.env.BOT_TOKEN,{polling:true});
+  const botAdmin = process.env.BOT_ADMIN_ID;
+
+  bot.sendMessage(botAdmin, '🤖 Бот успешно запущен!');
+
+  bot.onText(/\/start/, (msg)=>{
+    bot.sendMessage(msg.chat.id, `Привет! Твой ID: ${msg.chat.id}`);
+  });
+
+  bot.onText(/\/ping/, (msg)=>{
+    bot.sendMessage(msg.chat.id, 'Pong 🏓');
+  });
+
   bot.on('message', msg=>{
-    const username = msg.from.username || msg.from.first_name || "unknown";
-    const text = msg.text;
-    const date = new Date().toISOString();
-    addReport(username,text,date);
-    bot.sendMessage(msg.chat.id,`Принял сообщение: "${text}"`);
+    if(msg.text && !msg.text.startsWith('/')){ // все обычные сообщения
+      const username = msg.from.username || msg.from.first_name || "unknown";
+      const text = msg.text;
+      const date = new Date().toISOString();
+      addReport(username, text, date);
+      bot.sendMessage(msg.chat.id, `Принял сообщение: "${text}"`);
+    }
   });
 }
 
 // ------------------ Запуск ------------------
 const PORT = process.env.PORT || 10000;
-app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
+app.listen(PORT, ()=>console.log(`Server running on port ${PORT}`));
