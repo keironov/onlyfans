@@ -1,4 +1,4 @@
-import express from 'express';
+ import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
 import path from 'path';
@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
 
 import * as db from './database.js';
+
 
 dotenv.config();
 
@@ -227,3 +228,8 @@ app.get('*', (req, res, next) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+
+
+
+

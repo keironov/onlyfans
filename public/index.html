@@ -1,297 +1,210 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Отчеты и Фидбэки</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Team Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      background-color: #f4f7fa;
+    :root{
+      --bg:#0f1724; --card:#111827; --muted:#9ca3af; --accent:#f59e0b;
     }
-
-    .container {
-      width: 80%;
-      margin: 0 auto;
-      padding-top: 20px;
-    }
-
-    .header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    h1 {
-      font-size: 2rem;
-      color: #333;
-    }
-
-    .section {
-      margin-bottom: 30px;
-    }
-
-    .button {
-      background-color: #007bff;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      cursor: pointer;
-      font-size: 1rem;
-    }
-
-    .form-control {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      font-size: 1rem;
-    }
-
-    .form-group {
-      margin-bottom: 15px;
-    }
-
-    .feedback-list,
-    .report-list {
-      list-style: none;
-      padding: 0;
-    }
-
-    .feedback-list li,
-    .report-list li {
-      padding: 10px;
-      background-color: #fff;
-      border: 1px solid #ddd;
-      margin-bottom: 10px;
-      border-radius: 5px;
-    }
-
-    .feedback-list li p,
-    .report-list li p {
-      margin: 0;
-    }
-
-    .action-buttons {
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .action-buttons button {
-      background-color: #28a745;
-      color: white;
-      padding: 5px 10px;
-      border: none;
-      cursor: pointer;
-      margin-left: 10px;
-    }
-
-    .action-buttons button.delete {
-      background-color: #dc3545;
-    }
+    body{ margin:0; font-family:Inter,Arial,Helvetica,sans-serif; background:linear-gradient(180deg,#0b1220,#0f1724); color:#e6eef8; }
+    .wrap{ max-width:1200px; margin:24px auto; padding:20px; }
+    .top{ display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    .card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); }
+    .grid{ display:grid; grid-template-columns: 1fr 420px; gap:16px; margin-top:16px; }
+    .team-list{ max-height:540px; overflow:auto; padding:8px; }
+    .user-row{ display:flex; justify-content:space-between; padding:8px; border-bottom:1px dashed rgba(255,255,255,0.03); }
+    .muted{ color:var(--muted); font-size:13px; }
+    input, textarea, select{ width:100%; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; }
+    button{ background:var(--accent); color:#081125; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
+    .small{ font-size:13px; color:var(--muted); }
   </style>
 </head>
 <body>
-
-  <div class="container">
-    <div class="header">
-      <h1>Добро пожаловать в систему отчетности и фидбэков</h1>
-      <p>Здесь вы можете создавать отчеты и отправлять фидбэки.</p>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1 style="margin:0">Team Dashboard</h1>
+        <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
+      </div>
+      <div>
+        <button id="refreshBtn">Refresh</button>
+      </div>
     </div>
 
-    <div class="section">
-      <h2>Создать отчет</h2>
-      <form id="report-form">
-        <div class="form-group">
-          <label for="username">Ваше имя (или имя пользователя):</label>
-          <input type="text" id="username" class="form-control" placeholder="Введите ваше имя" required>
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h3 style="margin-top:0">Global Stats</h3>
+          <div id="globalSummary" class="small muted">Loading...</div>
+          <canvas id="leaderboardChart" style="height:220px;margin-top:12px;"></canvas>
         </div>
-        <div class="form-group">
-          <label for="report-text">Текст отчета:</label>
-          <textarea id="report-text" class="form-control" rows="5" placeholder="Введите текст отчета" required></textarea>
-        </div>
-        <button type="submit" class="button">Отправить отчет</button>
-      </form>
-    </div>
 
-    <div class="section">
-      <h2>Создать фидбэк</h2>
-      <form id="feedback-form">
-        <div class="form-group">
-          <label for="manager-username">Имя менеджера:</label>
-          <input type="text" id="manager-username" class="form-control" placeholder="Имя менеджера" required>
+        <div class="card" style="margin-top:12px;">
+          <h3 style="margin-top:0">Recent Reports</h3>
+          <div id="reportsList" class="team-list small muted">Loading...</div>
         </div>
-        <div class="form-group">
-          <label for="to-username">Кому отправить фидбэк:</label>
-          <input type="text" id="to-username" class="form-control" placeholder="Имя получателя" required>
-        </div>
-        <div class="form-group">
-          <label for="feedback-message">Сообщение:</label>
-          <textarea id="feedback-message" class="form-control" rows="5" placeholder="Введите сообщение" required></textarea>
-        </div>
-        <button type="submit" class="button">Отправить фидбэк</button>
-      </form>
-    </div>
 
-    <div class="section">
-      <h2>Последние отчеты</h2>
-      <ul id="report-list" class="report-list"></ul>
-    </div>
+        <div class="card" style="margin-top:12px;">
+          <h3 style="margin-top:0">Submit Quick Report (web)</h3>
+          <div style="display:grid;gap:8px">
+            <input id="reportUser" placeholder="username (e.g. @ivan)" />
+            <textarea id="reportText" rows="3" placeholder="text of report"></textarea>
+            <div style="display:flex;gap:8px"><button id="sendReport">Send report</button><div id="reportResult" class="small muted"></div></div>
+          </div>
+        </div>
 
-    <div class="section">
-      <h2>Последние фидбэки</h2>
-      <ul id="feedback-list" class="feedback-list"></ul>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3 style="margin-top:0">Team</h3>
+          <div id="teamList" class="team-list small muted">Loading...</div>
+        </div>
+
+        <div class="card" style="margin-top:12px;">
+          <h3 style="margin-top:0">Feedback (send to user)</h3>
+          <div style="display:grid;gap:8px">
+            <input id="managerUsername" placeholder="your username (manager)" />
+            <input id="toUsername" placeholder="to username (e.g. @ivan)" />
+            <textarea id="feedbackText" rows="3" placeholder="feedback message"></textarea>
+            <div style="display:flex;gap:8px"><button id="sendFeedback">Send Feedback</button><div id="feedbackResult" class="small muted"></div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px;">
+          <h3 style="margin-top:0">User Summary</h3>
+          <div style="display:grid;gap:8px">
+            <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
+            <button id="viewUserBtn">View</button>
+            <div id="userSummary" class="small muted">No user selected</div>
+            <canvas id="userActivityChart" style="height:180px;margin-top:8px;"></canvas>
+            <div id="userReports" class="small muted"></div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </div>
 
-  <script>
-    const API_URL = '/api';
+<script>
+async function fetchJson(url, opts){
+  const res = await fetch(url, opts);
+  return res.json();
+}
 
-    // Handle report form submission
-    document.getElementById('report-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const username = document.getElementById('username').value;
-      const text = document.getElementById('report-text').value;
+async function loadGlobal(){
+  const g = await fetchJson('/api/stats/global');
+  if (!g.ok) { document.getElementById('globalSummary').innerText = 'Failed to load'; return;}
+  const s = g.summary;
+  document.getElementById('globalSummary').innerText = `Users: ${s.usersCount} · Reports: ${s.reportsCount}`;
+  const ctx = document.getElementById('leaderboardChart').getContext('2d');
+  const top = s.leaderboard.slice(0,7);
+  // we need usernames for user ids -> fetch users
+  const usersResp = await fetchJson('/api/users');
+  const map = {};
+  if (usersResp.ok) {
+    usersResp.users.forEach(u => map[u.id] = u.username || u.display_name || u.id);
+  }
+  const labels = top.map(t => map[t.user_id] || t.user_id.slice(0,6));
+  const data = top.map(t => t.count);
+  if (window._leaderboardChart) window._leaderboardChart.destroy();
+  window._leaderboardChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Reports', data }]},
+    options: { plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true }} }
+  });
+}
 
-      if (username && text) {
-        try {
-          const response = await fetch(`${API_URL}/reports`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ username, text })
-          });
-          const data = await response.json();
-          if (data.ok) {
-            alert('Отчет отправлен!');
-            loadReports();
-          } else {
-            alert('Ошибка при отправке отчета');
-          }
-        } catch (error) {
-          console.error('Error:', error);
-          alert('Ошибка при отправке отчета');
-        }
-      }
+async function loadTeam(){
+  const r = await fetchJson('/api/users');
+  const el = document.getElementById('teamList');
+  if (!r.ok) { el.innerText = 'Failed'; return; }
+  const users = r.users;
+  el.innerHTML = '';
+  users.forEach(u => {
+    const row = document.createElement('div');
+    row.className='user-row';
+    row.innerHTML = `<div><strong>${u.username || u.display_name || '—'}</strong><div class="small muted">joined ${new Date(u.joined_at).toLocaleDateString()}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <button data-user="${u.username}" class="viewBtn" style="padding:6px 10px;font-size:13px">View</button>
+      </div>`;
+    el.appendChild(row);
+  });
+  // attach view handlers
+  document.querySelectorAll('.viewBtn').forEach(b=>{
+    b.addEventListener('click', ()=> {
+      document.getElementById('viewUsername').value = b.dataset.user || '';
+      document.getElementById('viewUserBtn').click();
+      window.scrollTo({top:600, behavior:'smooth'});
     });
+  });
+}
 
-    // Handle feedback form submission
-    document.getElementById('feedback-form').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const managerUsername = document.getElementById('manager-username').value;
-      const toUsername = document.getElementById('to-username').value;
-      const message = document.getElementById('feedback-message').value;
+async function loadReports(){
+  const r = await fetchJson('/api/reports');
+  const el = document.getElementById('reportsList');
+  if (!r.ok) { el.innerText = 'Failed'; return; }
+  const reps = r.reports.slice(0,30);
+  el.innerHTML = reps.map(r => `<div style="padding:6px 0"><strong>${r.username||r.user_id}</strong> • ${new Date(r.created_at).toLocaleString()}<div class="small muted">${r.text.slice(0,140)}</div></div>`).join('');
+}
 
-      if (managerUsername && toUsername && message) {
-        try {
-          const response = await fetch(`${API_URL}/feedback`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ manager_username: managerUsername, to_username: toUsername, message })
-          });
-          const data = await response.json();
-          if (data.ok) {
-            alert('Фидбэк отправлен!');
-            loadFeedback();
-          } else {
-            alert('Ошибка при отправке фидбэка');
-          }
-        } catch (error) {
-          console.error('Error:', error);
-          alert('Ошибка при отправке фидбэка');
-        }
-      }
-    });
+document.getElementById('refreshBtn').addEventListener('click', ()=> { loadAll(); });
 
-    // Load reports from the server
-    async function loadReports() {
-      try {
-        const response = await fetch(`${API_URL}/reports`);
-        const data = await response.json();
-        const reports = data.reports || [];
-        const reportList = document.getElementById('report-list');
-        reportList.innerHTML = '';
-        reports.forEach(report => {
-          const li = document.createElement('li');
-          li.innerHTML = `
-            <p><strong>Отчет от ${report.username}</strong></p>
-            <p>${report.text}</p>
-            <p><small>Создано: ${new Date(report.created_at).toLocaleString()}</small></p>
-            <div class="action-buttons">
-              <button class="delete" onclick="deleteReport(${report.id})">Удалить</button>
-            </div>
-          `;
-          reportList.appendChild(li);
-        });
-      } catch (error) {
-        console.error('Error loading reports:', error);
-      }
-    }
+async function loadAll(){
+  await loadGlobal();
+  await loadTeam();
+  await loadReports();
+}
 
-    // Load feedback from the server
-    async function loadFeedback() {
-      try {
-        const response = await fetch(`${API_URL}/feedback`);
-        const data = await response.json();
-        const feedback = data.feedback || [];
-        const feedbackList = document.getElementById('feedback-list');
-        feedbackList.innerHTML = '';
-        feedback.forEach(feedback => {
-          const li = document.createElement('li');
-          li.innerHTML = `
-            <p><strong>Фидбэк от ${feedback.manager_username} к ${feedback.to_username}</strong></p>
-            <p>${feedback.message}</p>
-            <p><small>Создано: ${new Date(feedback.created_at).toLocaleString()}</small></p>
-            <div class="action-buttons">
-              <button class="delete" onclick="deleteFeedback(${feedback.id})">Удалить</button>
-            </div>
-          `;
-          feedbackList.appendChild(li);
-        });
-      } catch (error) {
-        console.error('Error loading feedback:', error);
-      }
-    }
+document.getElementById('sendReport').addEventListener('click', async ()=>{
+  const username = document.getElementById('reportUser').value.trim();
+  const text = document.getElementById('reportText').value.trim();
+  const resEl = document.getElementById('reportResult');
+  if (!username || !text) { resEl.innerText = 'Fill username and text'; return; }
+  resEl.innerText = 'Sending...';
+  const r = await fetchJson('/api/reports', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, text }) });
+  if (r.ok) { resEl.innerText = 'Sent'; document.getElementById('reportText').value=''; loadAll(); } else resEl.innerText = 'Error: '+(r.error||'');
+});
 
-    // Delete report (example)
-    async function deleteReport(id) {
-      try {
-        const response = await fetch(`${API_URL}/reports/${id}`, { method: 'DELETE' });
-        const data = await response.json();
-        if (data.ok) {
-          alert('Отчет удален');
-          loadReports();
-        }
-      } catch (error) {
-        console.error('Error deleting report:', error);
-        alert('Ошибка при удалении отчета');
-      }
-    }
+document.getElementById('sendFeedback').addEventListener('click', async ()=>{
+  const manager = document.getElementById('managerUsername').value.trim();
+  const to = document.getElementById('toUsername').value.trim();
+  const message = document.getElementById('feedbackText').value.trim();
+  const resEl = document.getElementById('feedbackResult');
+  if (!to || !message) { resEl.innerText='to and message required'; return; }
+  resEl.innerText = 'Sending...';
+  const r = await fetchJson('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ manager_username: manager, to_username: to, message })});
+  if (r.ok) { resEl.innerText='Sent'; document.getElementById('feedbackText').value=''; } else resEl.innerText='Error: '+(r.error||'');
+});
 
-    // Delete feedback (example)
-    async function deleteFeedback(id) {
-      try {
-        const response = await fetch(`${API_URL}/feedback/${id}`, { method: 'DELETE' });
-        const data = await response.json();
-        if (data.ok) {
-          alert('Фидбэк удален');
-          loadFeedback();
-        }
-      } catch (error) {
-        console.error('Error deleting feedback:', error);
-        alert('Ошибка при удалении фидбэка');
-      }
-    }
+document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
+  const username = document.getElementById('viewUsername').value.trim();
+  if (!username) return;
+  const r = await fetchJson('/api/user/' + encodeURIComponent(username));
+  const el = document.getElementById('userSummary');
+  if (!r.ok) { el.innerText = 'User not found'; return; }
+  const { user, summary, reports } = r;
+  el.innerHTML = `<div><strong>${user.username || user.display_name}</strong> · Reports: ${summary.count} · Suspicious: ${summary.suspicious_count} · DA%: ${summary.DApercent}% · NET%: ${summary.NETpercent}% · UsefulIndex: ${summary.usefulIndex}</div>`;
+  // activity chart
+  const labels = Object.keys(summary.last30).reverse();
+  const data = labels.map(k => summary.last30[k]);
+  const ctx = document.getElementById('userActivityChart').getContext('2d');
+  if (window._userActivityChart) window._userActivityChart.destroy();
+  window._userActivityChart = new Chart(ctx, {
+    type:'line',
+    data: { labels, datasets: [{ label:'Reports/day', data, fill:true }]},
+    options:{ plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true }}}
+  });
+  // reports list
+  const rEl = document.getElementById('userReports');
+  rEl.innerHTML = reports.slice(0,20).map(r => `<div style="padding:6px 0"><div class="small muted">${new Date(r.created_at).toLocaleString()} · ${r.task_type} · suspicious:${r.suspicious}</div><div>${r.text}</div></div>`).join('');
+});
 
-    // Initial load
-    loadReports();
-    loadFeedback();
-  </script>
+loadAll();
+</script>
 </body>
 </html>
+

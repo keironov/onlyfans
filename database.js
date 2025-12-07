@@ -1,141 +1,189 @@
-import sqlite3 from 'sqlite3';
+import sqlite3pkg from 'sqlite3';
+const sqlite3 = sqlite3pkg.verbose();
 
-const db = new sqlite3.Database('./database.db');
+const db = new sqlite3.Database('./database.sqlite');
 
-// Create tables
+// === CREATE TABLES ===
 export function init() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT,
-      telegram_id TEXT,
-      created_at INTEGER
-    );
-  `);
-  
-  db.run(`
-    CREATE TABLE IF NOT EXISTS reports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      text TEXT,
-      created_at INTEGER,
-      FOREIGN KEY(user_id) REFERENCES users(id)
-    );
-  `);
+  db.serialize(() => {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id TEXT UNIQUE,
+        username TEXT UNIQUE,
+        display_name TEXT
+      )
+    `);
 
-  db.run(`
-    CREATE TABLE IF NOT EXISTS feedback (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
-      manager_id INTEGER,
-      message TEXT,
-      created_at INTEGER,
-      FOREIGN KEY(user_id) REFERENCES users(id),
-      FOREIGN KEY(manager_id) REFERENCES users(id)
-    );
-  `);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        text TEXT,
+        task_type TEXT,
+        length INTEGER,
+        suspicious INTEGER,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        manager_id INTEGER,
+        message TEXT,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(manager_id) REFERENCES users(id)
+      )
+    `);
+  });
 }
 
-// Ensure user exists or create new one
-export async function ensureUserByTelegram(telegramId, username, display_name) {
+// === HELPERS ===
+
+export function ensureUserByTelegram(telegram_id, username, display) {
   return new Promise((resolve, reject) => {
-    db.get(`SELECT * FROM users WHERE telegram_id = ?`, [telegramId], (err, row) => {
-      if (err) reject(err);
-      if (row) return resolve(row);
-      
-      db.run(
-        `INSERT INTO users (telegram_id, username, created_at) VALUES (?, ?, ?)`,
-        [telegramId, username, Date.now()],
-        function(err) {
-          if (err) reject(err);
-          resolve({ id: this.lastID, telegram_id: telegramId, username, created_at: Date.now() });
+    db.get(
+      `SELECT * FROM users WHERE telegram_id = ?`,
+      [telegram_id],
+      (err, row) => {
+        if (err) return reject(err);
+
+        if (row) {
+          return resolve(row);
         }
-      );
-    });
-  });
-}
 
-// Add report
-export async function addReport({ user_id, text, created_at }) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO reports (user_id, text, created_at) VALUES (?, ?, ?)`,
-      [user_id, text, created_at],
-      function(err) {
-        if (err) reject(err);
-        resolve({ id: this.lastID, user_id, text, created_at });
+        db.run(
+          `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
+          [telegram_id, username, display],
+          function (err2) {
+            if (err2) return reject(err2);
+            db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
+              e ? reject(e) : resolve(r)
+            );
+          }
+        );
       }
     );
   });
 }
 
-// List users
-export async function listUsers() {
+export function getUserByUsername(username) {
   return new Promise((resolve, reject) => {
-    db.all(`SELECT * FROM users`, (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
-    });
+    db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) =>
+      err ? reject(err) : resolve(row)
+    );
   });
 }
 
-// Get user by username
-export async function getUserByUsername(username) {
+export function listUsers() {
   return new Promise((resolve, reject) => {
-    db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) => {
-      if (err) reject(err);
-      resolve(row);
-    });
+    db.all(`SELECT * FROM users ORDER BY id DESC`, (err, rows) =>
+      err ? reject(err) : resolve(rows)
+    );
   });
 }
 
-// Get global summary (example)
-export async function globalSummary() {
+export function addReport({ user_id, text, created_at }) {
   return new Promise((resolve, reject) => {
-    db.all(`
-      SELECT u.username, COUNT(r.id) AS reportsCount
-      FROM users u
-      LEFT JOIN reports r ON u.id = r.user_id
-      GROUP BY u.id
-      ORDER BY reportsCount DESC
-      LIMIT 10
-    `, (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
-    });
+    const length = text.length;
+    const suspicious = length < 5 ? 1 : 0;
+    const task_type = length < 20 ? 'short' : 'long';
+
+    db.run(
+      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [user_id, text, task_type, length, suspicious, created_at],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM reports WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
   });
 }
 
-// Add feedback (example)
-export async function addFeedback({ user_id, manager_id, message, created_at }) {
+export function listReports(limit = 1000) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT reports.*, users.username 
+       FROM reports 
+       LEFT JOIN users ON users.id = reports.user_id
+       ORDER BY reports.id DESC 
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function listReportsForUser(user_id, limit = 200) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM reports WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
+      [user_id, limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function summaryForUser(user_id) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         COUNT(*) AS total,
+         SUM(length) AS total_length,
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious
+       FROM reports
+       WHERE user_id = ?`,
+      [user_id],
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+export function addFeedback({ user_id, manager_id, message, created_at }) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO feedback (user_id, manager_id, message, created_at) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO feedback (user_id, manager_id, message, created_at)
+       VALUES (?, ?, ?, ?)`,
       [user_id, manager_id, message, created_at],
-      function(err) {
-        if (err) reject(err);
-        resolve({ id: this.lastID, user_id, manager_id, message, created_at });
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM feedback WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
       }
     );
   });
 }
 
-// List reports
-export async function listReports(limit = 100) {
+export function listFeedback() {
   return new Promise((resolve, reject) => {
-    db.all(`SELECT * FROM reports ORDER BY created_at DESC LIMIT ?`, [limit], (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
-    });
+    db.all(
+      `SELECT feedback.*, u.username AS user_name, m.username AS manager_name
+       FROM feedback
+       LEFT JOIN users u ON u.id = feedback.user_id
+       LEFT JOIN users m ON m.id = feedback.manager_id
+       ORDER BY feedback.id DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
   });
 }
 
-// List feedback
-export async function listFeedback() {
+export function globalSummary() {
   return new Promise((resolve, reject) => {
-    db.all(`SELECT * FROM feedback ORDER BY created_at DESC`, (err, rows) => {
-      if (err) reject(err);
-      resolve(rows);
-    });
+    db.get(
+      `SELECT 
+         COUNT(*) AS reports_total,
+         SUM(length) AS total_length,
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
+       FROM reports`,
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
   });
 }
