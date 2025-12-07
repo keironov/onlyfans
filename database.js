@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   net_count INTEGER DEFAULT 0,
   avg_length REAL DEFAULT 0,
   repeats INTEGER DEFAULT 0,
-  types_json TEXT, -- JSON для подсчета задач: {accounts:0, chat:0, to_ig:0}
+  types_json TEXT,
   last_report TEXT
 )
 `).run();
@@ -40,12 +40,12 @@ CREATE TABLE IF NOT EXISTS feedback (
 )
 `).run();
 
-// ------------------ Таблица активности (тепловая карта) ------------------
+// ------------------ Таблица активности ------------------
 db.prepare(`
 CREATE TABLE IF NOT EXISTS activity_heat (
   username TEXT,
-  day INTEGER,   -- 0=Воскресенье ... 6=Суббота
-  hour INTEGER,  -- 0..23
+  day INTEGER,
+  hour INTEGER,
   count INTEGER DEFAULT 0,
   PRIMARY KEY (username, day, hour)
 )
@@ -106,8 +106,11 @@ export function addReport(username, message, date){
   // проверка подозрительности
   const {suspicious} = detectSuspicious(username, message);
 
+  // Преобразуем булево в число для SQLite
+  const suspiciousValue = suspicious ? 1 : 0;
+
   db.prepare("INSERT INTO reports(username,message,date,task_type,suspicious) VALUES(?,?,?,?,?)")
-    .run(username, message, date, task_type, suspicious);
+    .run(username, message, date, task_type, suspiciousValue);
 
   // обновляем активность пользователя
   const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
@@ -153,9 +156,7 @@ function classifyTask(message){
 // ------------------ Функция детектора подозрительности ------------------
 function detectSuspicious(username, message){
   let suspicious = false;
-  // короткие сообщения
   if(message.length < 15) suspicious = true;
-  // повторяющиеся шаблоны
   if(message.match(/делал аккаунт(ов)?/gi)) suspicious = true;
   return {suspicious};
 }
