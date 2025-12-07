@@ -8,7 +8,6 @@ import TelegramBot from 'node-telegram-bot-api';
 
 import * as db from './database.js';
 
-
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
