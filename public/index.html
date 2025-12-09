@@ -165,6 +165,7 @@ async function loadReports(){
           tr.remove();
         });
       } else {
+        // Обновляем значения без пересоздания
         if(existingRows[rep.id]){
           tr.querySelector('input').value = existingRows[rep.id].number;
           tr.querySelector('select').value = existingRows[rep.id].type;
@@ -207,21 +208,26 @@ async function loadGlobalChart(){
     const total = data.happn+data.instagram+data.lid;
     globalSummaryEl.innerText = `Всего: ${total} · Happn: ${data.happn} · Instagram: ${data.instagram} · Лид: ${data.lid}`;
 
-    if(globalChart) globalChart.destroy();
-    globalChart = new Chart(globalChartCtx,{
-      type:'doughnut',
-      data:{
-        labels:['Happn','Instagram','Лид'],
-        datasets:[{
-          data:[data.happn,data.instagram,data.lid],
-          backgroundColor:['#f59e0b','#10b981','#3b82f6']
-        }]
-      },
-      options:{
-        plugins:{legend:{position:'bottom'}},
-        cutout:'60%'
-      }
-    });
+    if(globalChart){
+      globalChart.data.datasets[0].data = [data.happn,data.instagram,data.lid];
+      globalChart.update();
+    } else {
+      globalChart = new Chart(globalChartCtx,{
+        type:'doughnut',
+        data:{
+          labels:['Happn','Instagram','Лид'],
+          datasets:[{
+            data:[data.happn,data.instagram,data.lid],
+            backgroundColor:['#f59e0b','#10b981','#3b82f6']
+          }]
+        },
+        options:{
+          plugins:{legend:{position:'bottom'}},
+          cutout:'60%',
+          animation:{duration:500}
+        }
+      });
+    }
   }catch(e){ console.error(e); }
 }
 
@@ -245,18 +251,22 @@ document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
       `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
 
     const ctx = document.getElementById('userActivityChart').getContext('2d');
-    if(window.userChart) window.userChart.destroy();
-    window.userChart = new Chart(ctx,{
-      type:'doughnut',
-      data:{
-        labels:['Happn','Instagram','Лид'],
-        datasets:[{
-          data:[byType.happn,byType.instagram,byType.lid],
-          backgroundColor:['#f59e0b','#10b981','#3b82f6']
-        }]
-      },
-      options:{cutout:'60%'}
-    });
+    if(window.userChart){
+      window.userChart.data.datasets[0].data = [byType.happn,byType.instagram,byType.lid];
+      window.userChart.update();
+    } else {
+      window.userChart = new Chart(ctx,{
+        type:'doughnut',
+        data:{
+          labels:['Happn','Instagram','Лид'],
+          datasets:[{
+            data:[byType.happn,byType.instagram,byType.lid],
+            backgroundColor:['#f59e0b','#10b981','#3b82f6']
+          }]
+        },
+        options:{cutout:'60%', animation:{duration:500}}
+      });
+    }
   }catch(e){ console.error(e); }
 });
 
