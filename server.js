@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
+import fs from 'fs';
 import * as db from './database.js';
 
 dotenv.config();
@@ -27,16 +28,22 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '200kb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Serve frontend (static)
+// === STATIC FRONTEND ===
 app.use('/', express.static(path.join(__dirname, 'public')));
 
-// --- Telegram bot via webhook ---
+// === TEXT LOGGER FILE ===
+const LOG_FILE = path.join(process.cwd(), 'text_log.txt');
+
+// === TELEGRAM BOT WEBHOOK ===
 let bot = null;
+
 if (BOT_TOKEN && WEBHOOK_URL) {
   try {
     bot = new TelegramBot(BOT_TOKEN, { webHook: true });
+
     const webhookPath = '/tg';
     const fullWebhookUrl = WEBHOOK_URL.replace(/\/$/, '') + webhookPath;
+
     (async () => {
       await bot.setWebHook(fullWebhookUrl);
       console.log('Telegram webhook set →', fullWebhookUrl);
@@ -54,7 +61,7 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       }
     });
 
-    // /start handler
+    // === /start ===
     bot.onText(/\/start/, async (msg) => {
       try {
         const chatId = msg.chat.id;
@@ -67,26 +74,30 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       }
     });
 
-    // regular messages -> store as report
+    // ========================================================
+    // === TEXT LOGGER: Только в text_log.txt, НЕ в reports ===
+    // ========================================================
     bot.on('message', async (msg) => {
       if (!msg.text || msg.text.startsWith('/')) return;
+
+      // нормализуем имя
+      const username = msg.from.username
+        ? `@${msg.from.username}`
+        : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+
+      const logEntry = `${username}: ${msg.text}\n`;
+
       try {
-        const user = await db.ensureUserByTelegram(
-          String(msg.from.id),
-          msg.from.username || null,
-          `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim()
-        );
-        const rep = await db.addReport({
-          user_id: user.id,
-          text: msg.text,
-          created_at: Date.now()
-        });
-        await bot.sendMessage(
-          msg.chat.id,
-          `Отчёт получен. Тип: ${rep.task_type}. Длина: ${rep.length}. Suspicious: ${rep.suspicious ? 'yes' : 'no'}.`
-        );
-      } catch (e) {
-        console.error('Error storing report', e);
+        fs.appendFileSync(LOG_FILE, logEntry, 'utf8');
+      } catch (err) {
+        console.error('Ошибка записи text_log.txt:', err);
+      }
+
+      // Телеграм не должен сохраняться в reports → просто отвечаем
+      try {
+        await bot.sendMessage(msg.chat.id, 'Ваше сообщение записано в text log.');
+      } catch (err) {
+        console.error('Ошибка ответа бота:', err);
       }
     });
 
@@ -96,12 +107,15 @@ if (BOT_TOKEN && WEBHOOK_URL) {
   }
 }
 
-// --- API routes ---
+// =====================================================
+// ===================   API   ==========================
+// =====================================================
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, env: { webhook: !!WEBHOOK_URL, bot: !!BOT_TOKEN } });
 });
 
-// Users list
+// Users
 app.get('/api/users', async (req, res) => {
   try {
     const users = await db.listUsers();
@@ -111,34 +125,41 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// User summary + reports
+// User info + reports
 app.get('/api/user/:username', async (req, res) => {
   try {
     const username = req.params.username;
     const user = await db.getUserByUsername(username);
     if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
+
     const summary = await db.summaryForUser(user.id);
     const reports = await db.listReportsForUser(user.id, 500);
-    // normalize summary keys for frontend
-    const normSummary = {
-      total: summary.total || 0,
-      total_length: summary.total_length || 0,
-      suspicious: summary.suspicious || 0
-    };
-    res.json({ ok: true, user, summary: normSummary, reports });
+
+    res.json({
+      ok: true,
+      user,
+      summary: {
+        total: summary.total || 0,
+        total_length: summary.total_length || 0,
+        suspicious: summary.suspicious || 0
+      },
+      reports
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// Create report (from UI) — UPDATED: accepts `reason`
+// Web report creation
 app.post('/api/reports', async (req, res) => {
   try {
     const { username, text, reason } = req.body;
-    if (!username || !text || !reason) return res.status(400).json({ ok: false, error: 'username, reason and text required' });
+    if (!username || !text || !reason)
+      return res.status(400).json({ ok: false, error: 'username, reason and text required' });
 
     let user = await db.getUserByUsername(username);
-    if (!user) user = await db.ensureUserByTelegram(`web-${Date.now()}`, username, username);
+    if (!user)
+      user = await db.ensureUserByTelegram(`web-${Date.now()}`, username, username);
 
     const rep = await db.addReport({
       user_id: user.id,
@@ -146,7 +167,6 @@ app.post('/api/reports', async (req, res) => {
       created_at: Date.now()
     });
 
-    // send message to admin in the required format
     if (bot && BOT_ADMIN_ID) {
       const message = `🚨 Ручной Репорт\n\nЮзер: ${username}\nПричина: ${reason}\nТекст: ${text}`;
       try {
@@ -166,6 +186,7 @@ app.post('/api/reports', async (req, res) => {
 app.post('/api/feedback', async (req, res) => {
   try {
     const { manager_username, to_username, message } = req.body;
+
     if (!to_username || !message)
       return res.status(400).json({ ok: false, error: 'to_username and message required' });
 
@@ -202,14 +223,13 @@ app.post('/api/feedback', async (req, res) => {
 app.get('/api/stats/global', async (req, res) => {
   try {
     const s = await db.globalSummary();
-    // try to include leaderboard key if you compute it elsewhere; keep compatibility
     res.json({ ok: true, summary: s });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-// Admin reports list
+// Admin report list
 app.get('/api/reports', async (req, res) => {
   try {
     const reps = await db.listReports(1000);
