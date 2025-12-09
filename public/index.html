@@ -6,218 +6,248 @@
 <title>Team Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root {
-  --bg:#0f1724;
-  --card:#111827;
-  --muted:#9ca3af;
-  --accent:#f59e0b;
-  --accent2:#10b981;
-  --error:#ef4444;
+:root{
+  --bg:#0f1724; --card:#111827; --muted:#9ca3af; --accent:#f59e0b;
 }
-html, body { margin:0; padding:0; font-family:Inter,Arial,sans-serif; height:100%; background:linear-gradient(180deg,#0b1220,#0f1724); color:#e6eef8; }
-.wrap { max-width:1200px; margin:20px auto; padding:16px; }
-.top { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
-.card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 4px 20px rgba(0,0,0,0.6); }
-.grid { display:grid; grid-template-columns:1fr 420px; gap:16px; }
-.team-list { max-height:540px; overflow:auto; }
-.muted { color:var(--muted); font-size:13px; }
-input, select, textarea { width:100%; padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#e6eef8; }
-select { cursor:pointer; }
-button { cursor:pointer; border:none; border-radius:6px; padding:6px 12px; font-weight:600; }
-.btn-ok { background:var(--accent2); color:#081125; }
-.btn-rej { background:var(--error); color:#fff; }
-table { width:100%; border-collapse:collapse; margin-top:8px; }
-th, td { padding:6px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; }
-td select, td input { width:auto; }
-.small { font-size:13px; color:var(--muted); }
-.user-role { width:120px; }
-.category-select { width:100px; }
+html,body{height:100%;margin:0;padding:0;}
+body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#0b1220,#0f1724);color:#e6eef8;}
+.wrap{max-width:1200px;margin:24px auto;padding:20px;}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;}
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:16px;box-shadow: 0 6px 18px rgba(2,6,23,0.6);margin-bottom:12px;}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:16px;}
+.team-list{max-height:540px;overflow:auto;padding:8px;}
+.user-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);}
+.muted{color:var(--muted);font-size:13px;}
+input,textarea,select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box;}
+button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
+.small{font-size:13px;color:var(--muted);}
+h1,h3{margin:0 0 8px 0;}
+#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
+#userPickerModal{display:none;position:fixed;top:20%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:320px;max-height:60%;overflow-y:auto;z-index:2000;}
+.user-picker-item{padding:8px;cursor:pointer;border-radius:6px;}
+.user-picker-item:hover{background:rgba(255,255,255,0.02);}
+.muted-small{color:var(--muted);font-size:12px;}
+table{width:100%;border-collapse:collapse;color:#e6eef8;}
+th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
+td input,td select{width:auto;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <h1>Team Dashboard</h1>
-    <button id="refreshBtn">Refresh</button>
+    <div>
+      <h1>Team Dashboard</h1>
+      <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
+    </div>
+    <div>
+      <button id="refreshBtn">Refresh</button>
+    </div>
   </div>
 
   <div class="grid">
-    <!-- Left column -->
     <div>
+      <!-- Global Stats -->
       <div class="card">
         <h3>Global Stats</h3>
-        <select id="statsPeriod">
-          <option value="today">Сегодня</option>
-          <option value="yesterday">Вчера</option>
-          <option value="week">Неделя</option>
-          <option value="month">Месяц</option>
-        </select>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <select id="globalPeriod">
+            <option value="today">Сегодня</option>
+            <option value="yesterday">Вчера</option>
+            <option value="week">Неделя</option>
+            <option value="month">Месяц</option>
+          </select>
+          <div id="globalSummary" class="small muted">Loading...</div>
+        </div>
         <canvas id="globalChart" style="height:220px;"></canvas>
-        <div id="globalSummary" class="small muted">Loading...</div>
       </div>
 
+      <!-- Pending Reports -->
       <div class="card">
-        <h3>Pending Reports / ОТЧЕТЫ</h3>
+        <h3>Отчеты работников</h3>
         <table>
           <thead>
             <tr><th>@user</th><th>Text</th><th>Number</th><th>Type</th><th>✔ / ❌</th></tr>
           </thead>
-          <tbody id="pendingReportsBody"></tbody>
+          <tbody id="reportsTable"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Right column -->
     <div>
+      <!-- Team -->
       <div class="card">
         <h3>Team</h3>
-        <table>
-          <thead>
-            <tr><th>@user</th><th>Role</th></tr>
-          </thead>
-          <tbody id="teamBody"></tbody>
-        </table>
+        <div id="teamList" class="team-list small muted">Loading...</div>
       </div>
 
+      <!-- User Summary -->
       <div class="card">
         <h3>User Summary</h3>
-        <input id="viewUsername" placeholder="@username" />
-        <button id="viewUserBtn">View</button>
-        <div id="userSummary" class="small muted">No user selected</div>
-        <canvas id="userActivityChart" style="height:180px;"></canvas>
+        <div style="display:grid;gap:8px">
+          <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
+          <button id="viewUserBtn">View</button>
+          <div id="userSummary" class="small muted">No user selected</div>
+          <canvas id="userActivityChart" style="height:180px;"></canvas>
+          <div id="userReports" class="small muted"></div>
+        </div>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="userPickerOverlay"></div>
+<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
+  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
+  <div id="userPickerList" class="small muted">Loading...</div>
+  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+    <button id="closePickerBtn" type="button">Закрыть</button>
   </div>
 </div>
 
 <script>
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-// === Pending Reports ===
-const pendingBody = document.getElementById('pendingReportsBody');
-async function loadPendingReports() {
-  pendingBody.innerHTML='';
-  const r = await fetchJson('/api/reports');
-  r.reports.filter(rep=>rep.status==='pending').forEach(rep=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`
-      <td>${rep.username||'—'}</td>
-      <td>${rep.text}</td>
-      <td><input type="number" value="${rep.number||0}" /></td>
-      <td>
-        <select class="category-select">
-          <option ${rep.type==='happn'?'selected':''}>happn</option>
-          <option ${rep.type==='instagram'?'selected':''}>instagram</option>
-          <option ${rep.type==='lid'?'selected':''}>lid</option>
-        </select>
-      </td>
-      <td>
-        <button class="btn-ok">✔</button>
-        <button class="btn-rej">❌</button>
-      </td>
-    `;
-    const okBtn=tr.querySelector('.btn-ok');
-    const rejBtn=tr.querySelector('.btn-rej');
-    okBtn.onclick=async ()=>{
-      const number = tr.querySelector('input').value;
-      const type = tr.querySelector('select').value;
-      await fetch(`/api/reports/${rep.id}/approve`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({number,type})
+// ====== Global Stats (Donut) ======
+const globalCtx = document.getElementById('globalChart').getContext('2d');
+let globalChart = null;
+
+async function loadGlobalChart(period='today'){
+  try{
+    const res = await fetch(`/api/stats/global?period=${period}`);
+    const json = await res.json();
+    if(!json.ok) return;
+
+    const data = json.data;
+    const total = Object.values(data).reduce((a,b)=>a+b,0);
+    document.getElementById('globalSummary').innerText = `Всего: ${total} (${data.happn} Happn, ${data.instagram} Instagram, ${data.lid} Лиды)`;
+
+    const chartData = {
+      labels: ['Happn','Instagram','Лиды'],
+      datasets: [{
+        data: [data.happn,data.instagram,data.lid],
+        backgroundColor: ['#f59e0b','#3b82f6','#10b981'],
+        borderColor: '#0f1724',
+        borderWidth: 2
+      }]
+    };
+
+    if(globalChart) globalChart.destroy();
+    globalChart = new Chart(globalCtx,{
+      type:'doughnut',
+      data: chartData,
+      options:{
+        plugins:{legend:{position:'bottom'}},
+        cutout:'60%',
+        responsive:true
+      }
+    });
+
+  }catch(e){ console.error(e); }
+}
+document.getElementById('globalPeriod').addEventListener('change', (e)=>{
+  loadGlobalChart(e.target.value);
+});
+
+// ====== Pending Reports ======
+const reportsTable = document.getElementById('reportsTable');
+async function loadReports(){
+  reportsTable.innerHTML='';
+  try{
+    const res = await fetchJson('/api/reports');
+    if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
+    res.reports.filter(r=>r.status==='pending').forEach(rep=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML=`
+        <td>${rep.username||'—'}</td>
+        <td>${rep.text}</td>
+        <td><input type="number" value="0" style="width:60px"/></td>
+        <td>
+          <select>
+            <option value="happn">Happn</option>
+            <option value="instagram">Instagram</option>
+            <option value="lid">Лид</option>
+          </select>
+        </td>
+        <td>
+          <button style="background:#10b981;color:#081125;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
+          <button style="background:#ef4444;color:#fff;padding:2px 6px;cursor:pointer">❌</button>
+        </td>
+      `;
+      const numberInput = tr.querySelector('input');
+      const typeSelect = tr.querySelector('select');
+
+      tr.querySelector('button:first-child').addEventListener('click', async ()=>{
+        const number = parseInt(numberInput.value)||0;
+        const type = typeSelect.value;
+        await fetch(`/api/reports/${rep.id}/approve`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({number,type})
+        });
+        tr.remove(); loadGlobalChart(document.getElementById('globalPeriod').value);
       });
-      tr.remove(); loadGlobalStats(); loadUserCharts();
-    };
-    rejBtn.onclick=async ()=>{ 
-      await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'}); 
-      tr.remove(); 
-    };
-    pendingBody.appendChild(tr);
-  });
+      tr.querySelector('button:last-child').addEventListener('click', async ()=>{
+        await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
+        tr.remove();
+      });
+      reportsTable.appendChild(tr);
+    });
+  }catch(e){ console.error(e); }
 }
 
-// === Global Stats / Circle chart ===
-const globalCtx=document.getElementById('globalChart').getContext('2d');
-let globalChart=null;
-const globalSummaryEl=document.getElementById('globalSummary');
-async function loadGlobalStats() {
-  const period=document.getElementById('statsPeriod').value;
-  const r=await fetchJson(`/api/stats/global?period=${period}`);
-  const summary=r.summary;
-  globalSummaryEl.innerText=`Reports: ${summary.reports_total||0}, Suspicious: ${summary.suspicious_total||0}`;
-  const data=[summary.happn_total||0, summary.instagram_total||0, summary.lid_total||0];
-  const labels=['happn','instagram','lid'];
-  if(globalChart) globalChart.destroy();
-  globalChart=new Chart(globalCtx,{
-    type:'doughnut',
-    data:{labels,datasets:[{data,color:['#f59e0b','#10b981','#3b82f6']}]},
-    options:{plugins:{legend:{display:true}}}
-  });
-}
-document.getElementById('statsPeriod').onchange=loadGlobalStats;
-
-// === Team ===
-const teamBody=document.getElementById('teamBody');
-async function loadTeam() {
-  teamBody.innerHTML='';
-  const r=await fetchJson('/api/users');
-  r.users.forEach(u=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`
-      <td>${u.username||'—'}</td>
-      <td>
-        <select class="user-role">
-          <option ${u.role==='Работник'?'selected':''}>Работник</option>
-          <option ${u.role==='Уборщик'?'selected':''}>Уборщик</option>
-          <option ${u.role==='Бухгалтер'?'selected':''}>Бухгалтер</option>
-        </select>
-      </td>
-    `;
-    teamBody.appendChild(tr);
-  });
+// ====== Team List ======
+const teamListDiv = document.getElementById('teamList');
+async function loadTeam(){
+  teamListDiv.innerHTML='';
+  try{
+    const res = await fetchJson('/api/users');
+    if(!res.ok){ teamListDiv.innerText='Ошибка загрузки'; return; }
+    res.users.forEach(u=>{
+      const div = document.createElement('div');
+      div.style.display='flex'; div.style.justifyContent='space-between'; div.style.alignItems='center'; div.style.marginBottom='4px';
+      const nameSpan = document.createElement('span'); nameSpan.innerText = u.username || u.display_name;
+      const roleSelect = document.createElement('select');
+      ['работник','уборщик','бухгалтер'].forEach(role=>{
+        const opt = document.createElement('option'); opt.value=role; opt.innerText=role;
+        roleSelect.appendChild(opt);
+      });
+      div.appendChild(nameSpan); div.appendChild(roleSelect);
+      teamListDiv.appendChild(div);
+    });
+  }catch(e){ console.error(e); }
 }
 
-// === User Summary ===
-const userSummaryEl=document.getElementById('userSummary');
-const userChartCtx=document.getElementById('userActivityChart').getContext('2d');
-let userChart=null;
-async function loadUserCharts(username=null) {
+// ====== User Summary ======
+const viewBtn = document.getElementById('viewUserBtn');
+viewBtn.addEventListener('click', async ()=>{
+  const username = document.getElementById('viewUsername').value.trim();
   if(!username) return;
-  const u=await fetchJson(`/api/users?username=${username}`);
-  if(!u.ok || u.users.length===0){ userSummaryEl.innerText='User not found'; return; }
-  const userId=u.users[0].id;
-  const r=await fetchJson(`/api/reports?user_id=${userId}`);
-  const reps=r.reports.filter(rep=>rep.status==='approved');
-  const counts={
-    happn:0, instagram:0, lid:0
-  };
-  reps.forEach(rep=>{ if(counts[rep.type]!=undefined) counts[rep.type]++; });
-  userSummaryEl.innerText=`Approved Reports: ${reps.length}`;
-  const labels=['happn','instagram','lid'];
-  const data=[counts.happn, counts.instagram, counts.lid];
-  if(userChart) userChart.destroy();
-  userChart=new Chart(userChartCtx,{
-    type:'doughnut',
-    data:{labels,datasets:[{data,color:['#f59e0b','#10b981','#3b82f6']}]},
-    options:{plugins:{legend:{display:true}}}
-  });
-}
+  try{
+    const usersRes = await fetchJson('/api/users');
+    const user = usersRes.users.find(u=>u.username===username);
+    if(!user){ document.getElementById('userSummary').innerText='Пользователь не найден'; return; }
+    const reportsRes = await fetchJson('/api/reports');
+    const userReports = reportsRes.reports.filter(r=>r.user_id===user.id && r.status==='approved');
+    const total = userReports.reduce((a,b)=>a.number? a+parseInt(b.number):a,0);
+    document.getElementById('userSummary').innerText = `Всего: ${total} (${userReports.length} отчета)`;
 
-document.getElementById('viewUserBtn').onclick=()=>{
-  const uname=document.getElementById('viewUsername').value.trim();
-  if(uname) loadUserCharts(uname);
-}
+    const ctx = document.getElementById('userActivityChart').getContext('2d');
+    const typeCount = {happn:0,instagram:0,lid:0};
+    userReports.forEach(r=>{ if(r.number && r.type) typeCount[r.type]+=parseInt(r.number)||0; });
+    const chartData = {labels:['Happn','Instagram','Лиды'],datasets:[{data:[typeCount.happn,typeCount.instagram,typeCount.lid],backgroundColor:['#f59e0b','#3b82f6','#10b981'],borderColor:'#0f1724',borderWidth:2}]};
+    if(window.userChart) window.userChart.destroy();
+    window.userChart = new Chart(ctx,{type:'doughnut',data:chartData,options:{plugins:{legend:{position:'bottom'}},cutout:'60%'}});
+    document.getElementById('userReports').innerText = userReports.map(r=>`${r.text} (${r.number} ${r.type})`).join('\n');
 
-// Refresh all
-document.getElementById('refreshBtn').onclick=()=>{
-  loadPendingReports();
-  loadGlobalStats();
-  loadTeam();
-}
+  }catch(e){ console.error(e); }
+});
 
-loadPendingReports();
-loadGlobalStats();
-loadTeam();
+// ====== Initial Load ======
+document.getElementById('refreshBtn').addEventListener('click', ()=>{
+  loadReports(); loadTeam(); loadGlobalChart(document.getElementById('globalPeriod').value);
+});
+
+loadReports(); loadTeam(); loadGlobalChart(document.getElementById('globalPeriod').value);
 </script>
 </body>
 </html>
