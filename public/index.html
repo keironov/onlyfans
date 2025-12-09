@@ -6,9 +6,7 @@
 <title>Team Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root{
-  --bg:#0f1724; --card:#111827; --muted:#9ca3af; --accent:#f59e0b;
-}
+:root{--bg:#0f1724;--card:#111827;--muted:#9ca3af;--accent:#f59e0b;}
 html,body{height:100%;margin:0;padding:0;}
 body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#0b1220,#0f1724);color:#e6eef8;}
 .wrap{max-width:1200px;margin:24px auto;padding:20px;}
@@ -18,15 +16,10 @@ body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180
 .team-list{max-height:540px;overflow:auto;padding:8px;}
 .user-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);}
 .muted{color:var(--muted);font-size:13px;}
-input,textarea,select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box;}
-button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
+input,textarea,select{width:100%;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box;}
+button{background:var(--accent);color:#081125;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:600;}
 .small{font-size:13px;color:var(--muted);}
 h1,h3{margin:0 0 8px 0;}
-#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
-#userPickerModal{display:none;position:fixed;top:20%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:320px;max-height:60%;overflow-y:auto;z-index:2000;}
-.user-picker-item{padding:8px;cursor:pointer;border-radius:6px;}
-.user-picker-item:hover{background:rgba(255,255,255,0.02);}
-.muted-small{color:var(--muted);font-size:12px;}
 table{width:100%;border-collapse:collapse;color:#e6eef8;}
 th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
 td input,td select{width:auto;}
@@ -46,24 +39,22 @@ td input,td select{width:auto;}
 
   <div class="grid">
     <div>
-      <!-- Global Stats -->
       <div class="card">
         <h3>Global Stats</h3>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <select id="globalPeriod">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span class="small muted" id="globalSummary">Loading...</span>
+          <select id="globalPeriod" style="width:120px;">
             <option value="today">Сегодня</option>
             <option value="yesterday">Вчера</option>
             <option value="week">Неделя</option>
             <option value="month">Месяц</option>
           </select>
-          <div id="globalSummary" class="small muted">Loading...</div>
         </div>
         <canvas id="globalChart" style="height:220px;"></canvas>
       </div>
 
-      <!-- Pending Reports -->
       <div class="card">
-        <h3>Отчеты работников</h3>
+        <h3>Pending Reports (ОТЧЕТ)</h3>
         <table>
           <thead>
             <tr><th>@user</th><th>Text</th><th>Number</th><th>Type</th><th>✔ / ❌</th></tr>
@@ -74,13 +65,11 @@ td input,td select{width:auto;}
     </div>
 
     <div>
-      <!-- Team -->
       <div class="card">
         <h3>Team</h3>
         <div id="teamList" class="team-list small muted">Loading...</div>
       </div>
 
-      <!-- User Summary -->
       <div class="card">
         <h3>User Summary</h3>
         <div style="display:grid;gap:8px">
@@ -88,19 +77,10 @@ td input,td select{width:auto;}
           <button id="viewUserBtn">View</button>
           <div id="userSummary" class="small muted">No user selected</div>
           <canvas id="userActivityChart" style="height:180px;"></canvas>
-          <div id="userReports" class="small muted"></div>
+          <pre id="userReports" class="small muted" style="white-space:pre-wrap;"></pre>
         </div>
       </div>
     </div>
-  </div>
-</div>
-
-<div id="userPickerOverlay"></div>
-<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
-  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
-  <div id="userPickerList" class="small muted">Loading...</div>
-  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-    <button id="closePickerBtn" type="button">Закрыть</button>
   </div>
 </div>
 
@@ -110,10 +90,11 @@ async function fetchJson(url, opts){ const res = await fetch(url, opts); return 
 // ====== Global Stats (Donut) ======
 const globalCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
+let globalPeriod = 'today';
 
-async function loadGlobalChart(period='today'){
+async function loadGlobalChart(){
   try{
-    const res = await fetch(`/api/stats/global?period=${period}`);
+    const res = await fetch(`/api/stats/global?period=${globalPeriod}`);
     const json = await res.json();
     if(!json.ok) return;
 
@@ -145,17 +126,21 @@ async function loadGlobalChart(period='today'){
   }catch(e){ console.error(e); }
 }
 document.getElementById('globalPeriod').addEventListener('change', (e)=>{
-  loadGlobalChart(e.target.value);
+  globalPeriod = e.target.value;
+  loadGlobalChart();
 });
 
 // ====== Pending Reports ======
 const reportsTable = document.getElementById('reportsTable');
 async function loadReports(){
-  reportsTable.innerHTML='';
   try{
     const res = await fetchJson('/api/reports');
     if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
-    res.reports.filter(r=>r.status==='pending').forEach(rep=>{
+
+    const pendingReports = res.reports.filter(r=>r.status==='pending');
+    reportsTable.innerHTML = '';
+
+    pendingReports.forEach(rep=>{
       const tr = document.createElement('tr');
       tr.innerHTML=`
         <td>${rep.username||'—'}</td>
@@ -184,7 +169,8 @@ async function loadReports(){
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({number,type})
         });
-        tr.remove(); loadGlobalChart(document.getElementById('globalPeriod').value);
+        tr.remove();
+        loadGlobalChart();
       });
       tr.querySelector('button:last-child').addEventListener('click', async ()=>{
         await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
@@ -198,10 +184,10 @@ async function loadReports(){
 // ====== Team List ======
 const teamListDiv = document.getElementById('teamList');
 async function loadTeam(){
-  teamListDiv.innerHTML='';
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ teamListDiv.innerText='Ошибка загрузки'; return; }
+    teamListDiv.innerHTML='';
     res.users.forEach(u=>{
       const div = document.createElement('div');
       div.style.display='flex'; div.style.justifyContent='space-between'; div.style.alignItems='center'; div.style.marginBottom='4px';
@@ -219,35 +205,45 @@ async function loadTeam(){
 
 // ====== User Summary ======
 const viewBtn = document.getElementById('viewUserBtn');
+let currentUser=null;
 viewBtn.addEventListener('click', async ()=>{
   const username = document.getElementById('viewUsername').value.trim();
   if(!username) return;
   try{
     const usersRes = await fetchJson('/api/users');
-    const user = usersRes.users.find(u=>u.username===username);
-    if(!user){ document.getElementById('userSummary').innerText='Пользователь не найден'; return; }
-    const reportsRes = await fetchJson('/api/reports');
-    const userReports = reportsRes.reports.filter(r=>r.user_id===user.id && r.status==='approved');
-    const total = userReports.reduce((a,b)=>a.number? a+parseInt(b.number):a,0);
-    document.getElementById('userSummary').innerText = `Всего: ${total} (${userReports.length} отчета)`;
-
-    const ctx = document.getElementById('userActivityChart').getContext('2d');
-    const typeCount = {happn:0,instagram:0,lid:0};
-    userReports.forEach(r=>{ if(r.number && r.type) typeCount[r.type]+=parseInt(r.number)||0; });
-    const chartData = {labels:['Happn','Instagram','Лиды'],datasets:[{data:[typeCount.happn,typeCount.instagram,typeCount.lid],backgroundColor:['#f59e0b','#3b82f6','#10b981'],borderColor:'#0f1724',borderWidth:2}]};
-    if(window.userChart) window.userChart.destroy();
-    window.userChart = new Chart(ctx,{type:'doughnut',data:chartData,options:{plugins:{legend:{position:'bottom'}},cutout:'60%'}});
-    document.getElementById('userReports').innerText = userReports.map(r=>`${r.text} (${r.number} ${r.type})`).join('\n');
-
+    currentUser = usersRes.users.find(u=>u.username===username);
+    if(!currentUser){ document.getElementById('userSummary').innerText='Пользователь не найден'; return; }
+    updateUserSummary();
   }catch(e){ console.error(e); }
 });
 
-// ====== Initial Load ======
-document.getElementById('refreshBtn').addEventListener('click', ()=>{
-  loadReports(); loadTeam(); loadGlobalChart(document.getElementById('globalPeriod').value);
-});
+async function updateUserSummary(){
+  if(!currentUser) return;
+  const reportsRes = await fetchJson('/api/reports');
+  const userReports = reportsRes.reports.filter(r=>r.user_id===currentUser.id && r.status==='approved');
+  const total = userReports.reduce((a,b)=>b.number? a+parseInt(b.number):a,0);
+  document.getElementById('userSummary').innerText = `Всего: ${total} (${userReports.length} отчета)`;
 
-loadReports(); loadTeam(); loadGlobalChart(document.getElementById('globalPeriod').value);
+  const ctx = document.getElementById('userActivityChart').getContext('2d');
+  const typeCount = {happn:0,instagram:0,lid:0};
+  userReports.forEach(r=>{ if(r.number && r.type) typeCount[r.type]+=parseInt(r.number)||0; });
+  const chartData = {labels:['Happn','Instagram','Лиды'],datasets:[{data:[typeCount.happn,typeCount.instagram,typeCount.lid],backgroundColor:['#f59e0b','#3b82f6','#10b981'],borderColor:'#0f1724',borderWidth:2}]};
+  if(window.userChart) window.userChart.destroy();
+  window.userChart = new Chart(ctx,{type:'doughnut',data:chartData,options:{plugins:{legend:{position:'bottom'}},cutout:'60%'}});
+  document.getElementById('userReports').innerText = userReports.map(r=>`${r.text} (${r.number} ${r.type})`).join('\n');
+}
+
+// ====== Auto-refresh ======
+async function autoRefresh(){
+  loadReports();
+  loadTeam();
+  loadGlobalChart();
+  updateUserSummary();
+}
+setInterval(autoRefresh, 3000); // каждые 3 секунды
+
+// ====== Initial Load ======
+loadReports(); loadTeam(); loadGlobalChart(); 
 </script>
 </body>
 </html>
