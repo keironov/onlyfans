@@ -6,80 +6,85 @@
 <title>Team Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root{--bg:#0f1724;--card:#111827;--muted:#9ca3af;--accent:#f59e0b;}
-html,body{height:100%;margin:0;padding:0;}
-body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#0b1220,#0f1724);color:#e6eef8;}
-.wrap{max-width:1200px;margin:24px auto;padding:20px;}
-.top{display:flex;gap:12px;align-items:center;justify-content:space-between;}
-.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:16px;box-shadow: 0 6px 18px rgba(2,6,23,0.6);margin-bottom:12px;}
-.grid{display:grid;grid-template-columns:1fr 420px;gap:16px;}
-.team-list{max-height:540px;overflow:auto;padding:8px;}
-.user-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);}
-.muted{color:var(--muted);font-size:13px;}
-input,textarea,select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box;}
-button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
-.small{font-size:13px;color:var(--muted);}
-h1,h3{margin:0 0 8px 0;}
-table{width:100%;border-collapse:collapse;color:#e6eef8;}
-th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
-td input,td select{width:auto;}
+:root {
+  --bg:#0f1724;
+  --card:#111827;
+  --muted:#9ca3af;
+  --accent:#f59e0b;
+  --accent2:#10b981;
+  --error:#ef4444;
+}
+html, body { margin:0; padding:0; font-family:Inter,Arial,sans-serif; height:100%; background:linear-gradient(180deg,#0b1220,#0f1724); color:#e6eef8; }
+.wrap { max-width:1200px; margin:20px auto; padding:16px; }
+.top { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 4px 20px rgba(0,0,0,0.6); }
+.grid { display:grid; grid-template-columns:1fr 420px; gap:16px; }
+.team-list { max-height:540px; overflow:auto; }
+.muted { color:var(--muted); font-size:13px; }
+input, select, textarea { width:100%; padding:6px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:transparent; color:#e6eef8; }
+select { cursor:pointer; }
+button { cursor:pointer; border:none; border-radius:6px; padding:6px 12px; font-weight:600; }
+.btn-ok { background:var(--accent2); color:#081125; }
+.btn-rej { background:var(--error); color:#fff; }
+table { width:100%; border-collapse:collapse; margin-top:8px; }
+th, td { padding:6px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; }
+td select, td input { width:auto; }
+.small { font-size:13px; color:var(--muted); }
+.user-role { width:120px; }
+.category-select { width:100px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <div>
-      <h1>Team Dashboard</h1>
-      <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
-    </div>
-    <div>
-      <button id="refreshBtn">Refresh</button>
-    </div>
+    <h1>Team Dashboard</h1>
+    <button id="refreshBtn">Refresh</button>
   </div>
 
   <div class="grid">
+    <!-- Left column -->
     <div>
-      <!-- Global Stats -->
       <div class="card">
         <h3>Global Stats</h3>
-        <div style="display:flex;gap:8px;margin-bottom:8px;">
-          <select id="globalPeriod">
-            <option value="today">Сегодня</option>
-            <option value="yesterday">Вчера</option>
-            <option value="week">Неделя</option>
-            <option value="month">Месяц</option>
-          </select>
-        </div>
+        <select id="statsPeriod">
+          <option value="today">Сегодня</option>
+          <option value="yesterday">Вчера</option>
+          <option value="week">Неделя</option>
+          <option value="month">Месяц</option>
+        </select>
         <canvas id="globalChart" style="height:220px;"></canvas>
+        <div id="globalSummary" class="small muted">Loading...</div>
       </div>
 
-      <!-- Отчёты -->
       <div class="card">
-        <h3>Отчёты</h3>
+        <h3>Pending Reports / ОТЧЕТЫ</h3>
         <table>
           <thead>
             <tr><th>@user</th><th>Text</th><th>Number</th><th>Type</th><th>✔ / ❌</th></tr>
           </thead>
-          <tbody id="dailyTableBody"></tbody>
+          <tbody id="pendingReportsBody"></tbody>
         </table>
       </div>
     </div>
 
+    <!-- Right column -->
     <div>
       <div class="card">
         <h3>Team</h3>
-        <div id="teamList" class="team-list small muted">Loading...</div>
+        <table>
+          <thead>
+            <tr><th>@user</th><th>Role</th></tr>
+          </thead>
+          <tbody id="teamBody"></tbody>
+        </table>
       </div>
 
       <div class="card">
         <h3>User Summary</h3>
-        <div style="display:grid;gap:8px">
-          <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
-          <button id="viewUserBtn">View</button>
-          <div id="userSummary" class="small muted">No user selected</div>
-          <canvas id="userActivityChart" style="height:180px;"></canvas>
-          <div id="userReports" class="small muted"></div>
-        </div>
+        <input id="viewUsername" placeholder="@username" />
+        <button id="viewUserBtn">View</button>
+        <div id="userSummary" class="small muted">No user selected</div>
+        <canvas id="userActivityChart" style="height:180px;"></canvas>
       </div>
     </div>
   </div>
@@ -88,90 +93,131 @@ td input,td select{width:auto;}
 <script>
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-const dailyTableBody = document.getElementById('dailyTableBody');
-
-// ===== Load Reports =====
-async function loadReportsTable() {
-  dailyTableBody.innerHTML = '';
-  try {
-    const r = await fetchJson('/api/reports');
-    if(!r.ok){ dailyTableBody.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
-    r.reports.filter(rep=>rep.status==='pending').forEach(rep=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${rep.username||'—'}</td>
-        <td>${rep.text}</td>
-        <td><input type="number" value="0" style="width:60px"></td>
-        <td>
-          <select>
-            <option value="happn">happn</option>
-            <option value="instagram">instagram</option>
-            <option value="lid">lid</option>
-          </select>
-        </td>
-        <td>
-          <button style="background:#10b981;color:#081125;border:none;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
-          <button style="background:#ef4444;color:#fff;border:none;padding:2px 6px;cursor:pointer">❌</button>
-        </td>
-      `;
-      tr.querySelector('button:first-child').addEventListener('click', async ()=>{
-        const number = tr.querySelector('input').value;
-        const type = tr.querySelector('select').value;
-        await fetch(`/api/reports/${rep.id}/approve`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({number,type})
-        });
-        tr.remove();
-        loadGlobalChart();
+// === Pending Reports ===
+const pendingBody = document.getElementById('pendingReportsBody');
+async function loadPendingReports() {
+  pendingBody.innerHTML='';
+  const r = await fetchJson('/api/reports');
+  r.reports.filter(rep=>rep.status==='pending').forEach(rep=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${rep.username||'—'}</td>
+      <td>${rep.text}</td>
+      <td><input type="number" value="${rep.number||0}" /></td>
+      <td>
+        <select class="category-select">
+          <option ${rep.type==='happn'?'selected':''}>happn</option>
+          <option ${rep.type==='instagram'?'selected':''}>instagram</option>
+          <option ${rep.type==='lid'?'selected':''}>lid</option>
+        </select>
+      </td>
+      <td>
+        <button class="btn-ok">✔</button>
+        <button class="btn-rej">❌</button>
+      </td>
+    `;
+    const okBtn=tr.querySelector('.btn-ok');
+    const rejBtn=tr.querySelector('.btn-rej');
+    okBtn.onclick=async ()=>{
+      const number = tr.querySelector('input').value;
+      const type = tr.querySelector('select').value;
+      await fetch(`/api/reports/${rep.id}/approve`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({number,type})
       });
-      tr.querySelector('button:last-child').addEventListener('click', async ()=>{
-        await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
-        tr.remove();
-      });
-      dailyTableBody.appendChild(tr);
-    });
-  } catch(e){ console.error(e); }
+      tr.remove(); loadGlobalStats(); loadUserCharts();
+    };
+    rejBtn.onclick=async ()=>{ 
+      await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'}); 
+      tr.remove(); 
+    };
+    pendingBody.appendChild(tr);
+  });
 }
 
-// ===== Global Stats Chart =====
-const globalCtx = document.getElementById('globalChart').getContext('2d');
-let globalChart = null;
-const periodSelect = document.getElementById('globalPeriod');
+// === Global Stats / Circle chart ===
+const globalCtx=document.getElementById('globalChart').getContext('2d');
+let globalChart=null;
+const globalSummaryEl=document.getElementById('globalSummary');
+async function loadGlobalStats() {
+  const period=document.getElementById('statsPeriod').value;
+  const r=await fetchJson(`/api/stats/global?period=${period}`);
+  const summary=r.summary;
+  globalSummaryEl.innerText=`Reports: ${summary.reports_total||0}, Suspicious: ${summary.suspicious_total||0}`;
+  const data=[summary.happn_total||0, summary.instagram_total||0, summary.lid_total||0];
+  const labels=['happn','instagram','lid'];
+  if(globalChart) globalChart.destroy();
+  globalChart=new Chart(globalCtx,{
+    type:'doughnut',
+    data:{labels,datasets:[{data,color:['#f59e0b','#10b981','#3b82f6']}]},
+    options:{plugins:{legend:{display:true}}}
+  });
+}
+document.getElementById('statsPeriod').onchange=loadGlobalStats;
 
-async function loadGlobalChart() {
-  try {
-    const period = periodSelect.value;
-    const g = await fetchJson('/api/stats/global?period='+period);
-    if(!g.ok) return;
-    const data = g.data;
-    const labels = ['happn','instagram','lid'];
-    const values = [data.happn||0, data.instagram||0, data.lid||0];
-
-    if(globalChart) globalChart.destroy();
-    globalChart = new Chart(globalCtx,{
-      type:'doughnut',
-      data:{
-        labels,
-        datasets:[{data:values, backgroundColor:['#f59e0b','#3b82f6','#10b981'] }]
-      },
-      options:{
-        plugins:{legend:{position:'bottom'}}
-      }
-    });
-  } catch(e){ console.error(e); }
+// === Team ===
+const teamBody=document.getElementById('teamBody');
+async function loadTeam() {
+  teamBody.innerHTML='';
+  const r=await fetchJson('/api/users');
+  r.users.forEach(u=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${u.username||'—'}</td>
+      <td>
+        <select class="user-role">
+          <option ${u.role==='Работник'?'selected':''}>Работник</option>
+          <option ${u.role==='Уборщик'?'selected':''}>Уборщик</option>
+          <option ${u.role==='Бухгалтер'?'selected':''}>Бухгалтер</option>
+        </select>
+      </td>
+    `;
+    teamBody.appendChild(tr);
+  });
 }
 
-periodSelect.addEventListener('change', ()=>{ loadGlobalChart(); });
+// === User Summary ===
+const userSummaryEl=document.getElementById('userSummary');
+const userChartCtx=document.getElementById('userActivityChart').getContext('2d');
+let userChart=null;
+async function loadUserCharts(username=null) {
+  if(!username) return;
+  const u=await fetchJson(`/api/users?username=${username}`);
+  if(!u.ok || u.users.length===0){ userSummaryEl.innerText='User not found'; return; }
+  const userId=u.users[0].id;
+  const r=await fetchJson(`/api/reports?user_id=${userId}`);
+  const reps=r.reports.filter(rep=>rep.status==='approved');
+  const counts={
+    happn:0, instagram:0, lid:0
+  };
+  reps.forEach(rep=>{ if(counts[rep.type]!=undefined) counts[rep.type]++; });
+  userSummaryEl.innerText=`Approved Reports: ${reps.length}`;
+  const labels=['happn','instagram','lid'];
+  const data=[counts.happn, counts.instagram, counts.lid];
+  if(userChart) userChart.destroy();
+  userChart=new Chart(userChartCtx,{
+    type:'doughnut',
+    data:{labels,datasets:[{data,color:['#f59e0b','#10b981','#3b82f6']}]},
+    options:{plugins:{legend:{display:true}}}
+  });
+}
 
-document.getElementById('refreshBtn').addEventListener('click', ()=>{
-  loadReportsTable();
-  loadGlobalChart();
-});
+document.getElementById('viewUserBtn').onclick=()=>{
+  const uname=document.getElementById('viewUsername').value.trim();
+  if(uname) loadUserCharts(uname);
+}
 
-// Initial load
-loadReportsTable();
-loadGlobalChart();
+// Refresh all
+document.getElementById('refreshBtn').onclick=()=>{
+  loadPendingReports();
+  loadGlobalStats();
+  loadTeam();
+}
+
+loadPendingReports();
+loadGlobalStats();
+loadTeam();
 </script>
 </body>
 </html>

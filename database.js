@@ -11,7 +11,8 @@ export function init() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         telegram_id TEXT UNIQUE,
         username TEXT UNIQUE,
-        display_name TEXT
+        display_name TEXT,
+        role TEXT DEFAULT 'работник'
       )
     `);
 
@@ -57,8 +58,8 @@ export function ensureUserByTelegram(telegram_id, username, display) {
         if (row) return resolve(row);
 
         db.run(
-          `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
-          [telegram_id, username, display],
+          `INSERT INTO users (telegram_id, username, display_name, role) VALUES (?, ?, ?, ?)`,
+          [telegram_id, username, display, 'работник'],
           function (err2) {
             if (err2) return reject(err2);
             db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
@@ -87,16 +88,16 @@ export function listUsers() {
   });
 }
 
-export function addReport({ user_id, text, created_at }) {
+export function addReport({ user_id, text, created_at, number = 0, type = '' }) {
   return new Promise((resolve, reject) => {
     const length = text.length;
     const suspicious = length < 5 ? 1 : 0;
     const task_type = length < 20 ? 'short' : 'long';
 
     db.run(
-      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [user_id, text, task_type, length, suspicious, created_at],
+      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at, number, type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [user_id, text, task_type, length, suspicious, created_at, number, type],
       function (err) {
         if (err) return reject(err);
         db.get(`SELECT * FROM reports WHERE id = ?`, [this.lastID], (e, r) =>
@@ -110,7 +111,7 @@ export function addReport({ user_id, text, created_at }) {
 export function listReports(limit = 1000) {
   return new Promise((resolve, reject) => {
     db.all(
-      `SELECT reports.*, users.username 
+      `SELECT reports.*, users.username, users.role 
        FROM reports 
        LEFT JOIN users ON users.id = reports.user_id
        ORDER BY reports.id DESC 
@@ -137,7 +138,8 @@ export function summaryForUser(user_id) {
       `SELECT 
          COUNT(*) AS total,
          SUM(length) AS total_length,
-         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious,
+         SUM(number) AS total_number
        FROM reports
        WHERE user_id = ?`,
       [user_id],
@@ -181,7 +183,8 @@ export function globalSummary() {
       `SELECT 
          COUNT(*) AS reports_total,
          SUM(length) AS total_length,
-         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
+         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total,
+         SUM(number) AS total_number
        FROM reports
        WHERE status = 'approved'`,
       (err, row) => (err ? reject(err) : resolve(row))
@@ -189,7 +192,7 @@ export function globalSummary() {
   });
 }
 
-// === Обновление статуса отчета с возможностью задать number и type ===
+// === Обновление статуса отчета с number/type ===
 export function updateReportStatus(id, status, number = 0, type = '') {
   return new Promise((resolve, reject) => {
     db.run(

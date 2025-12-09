@@ -61,16 +61,19 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
       const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
 
+      // Add pending report
       await db.addReport({
         user_id: user.id,
         text: msg.text,
         created_at: Date.now()
       });
 
+      // Notify admin
       if (BOT_ADMIN_ID) {
         await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый отчет от ${username}: ${msg.text}`);
       }
 
+      // Confirm receipt
       await bot.sendMessage(msg.chat.id, 'Ваш отчет получен и ожидает одобрения.');
     });
   } catch (err) {
@@ -80,6 +83,43 @@ if (BOT_TOKEN && WEBHOOK_URL) {
 }
 
 // === API ===
+
+// Получение всех пользователей с ролями
+app.get('/api/users', async (req,res)=> {
+  try { 
+    const users = await db.listUsers();
+    res.json({ ok:true, users });
+  } catch(e){ res.json({ ok:false, error:e.message }); }
+});
+
+// Получение глобальной статистики по категориям и периодам
+app.get('/api/stats/global', async (req,res)=>{
+  try {
+    const period = req.query.period || 'today';
+    const reports = await db.listReports();
+
+    const now = Date.now();
+    let fromTime = 0;
+    switch(period){
+      case 'today':
+        const t = new Date(); t.setHours(0,0,0,0); fromTime = t.getTime(); break;
+      case 'yesterday':
+        const y = new Date(); y.setHours(0,0,0,0); fromTime = y.getTime()-86400000; break;
+      case 'week':
+        const w = new Date(); w.setHours(0,0,0,0); fromTime = w.getTime()-7*86400000; break;
+      case 'month':
+        const m = new Date(); m.setHours(0,0,0,0); fromTime = m.getTime()-30*86400000; break;
+    }
+
+    const filtered = reports.filter(r=>r.status==='approved' && r.created_at >= fromTime);
+    const data = { happn:0, instagram:0, lid:0 };
+    filtered.forEach(r=>{
+      if(r.number && r.type) data[r.type] += parseInt(r.number)||0;
+    });
+
+    res.json({ ok:true, data });
+  } catch(e){ res.json({ ok:false, error:e.message }); }
+});
 
 // Получение всех отчетов
 app.get('/api/reports', async (req,res)=> {
@@ -91,8 +131,7 @@ app.get('/api/reports', async (req,res)=> {
 app.post('/api/reports/:id/approve', async (req,res)=>{
   try {
     const { number, type } = req.body;
-    await db.updateReportStatus(req.params.id,'approved');
-    // Можно здесь сохранять number/type в отдельную таблицу или в notes
+    await db.updateReportStatus(req.params.id,'approved', number, type);
     res.json({ ok:true });
   } catch(e){ res.json({ ok:false, error:e.message }); }
 });
@@ -103,42 +142,19 @@ app.post('/api/reports/:id/reject', async (req,res)=>{
   catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Список пользователей
-app.get('/api/users', async (req,res)=> {
-  try { const users = await db.listUsers(); res.json({ ok:true, users }); } 
-  catch(e){ res.json({ ok:false, error:e.message }); }
-});
-
-// Глобальная статистика по категориям и периодам
-app.get('/api/stats/global', async (req,res)=>{
+// User summary по username
+app.get('/api/users/:username/summary', async (req,res)=>{
   try {
-    const period = req.query.period || 'today';
-    const reports = await db.listReports();
-
-    const now = Date.now();
-    let fromTime = 0;
-
-    switch(period){
-      case 'today':
-        const start = new Date(); start.setHours(0,0,0,0);
-        fromTime = start.getTime();
-        break;
-      case 'yesterday':
-        const y = new Date(); y.setHours(0,0,0,0); fromTime = y.getTime() - 86400000; break;
-      case 'week':
-        const w = new Date(); w.setHours(0,0,0,0); fromTime = w.getTime() - 7*86400000; break;
-      case 'month':
-        const m = new Date(); m.setHours(0,0,0,0); fromTime = m.getTime() - 30*86400000; break;
-    }
-
-    const filtered = reports.filter(r=>r.status==='approved' && r.created_at >= fromTime);
-
-    const data = { happn:0, instagram:0, lid:0 };
-    filtered.forEach(r=>{
-      if(r.number && r.type) data[r.type] += parseInt(r.number)||0;
+    const user = await db.getUserByUsername(req.params.username);
+    if(!user) return res.json({ ok:false, error:'User not found' });
+    const summary = await db.summaryForUser(user.id);
+    // Считаем категории
+    const reports = await db.listReportsForUser(user.id);
+    const categories = { happn:0, instagram:0, lid:0 };
+    reports.forEach(r=>{
+      if(r.number && r.type) categories[r.type] += parseInt(r.number)||0;
     });
-
-    res.json({ ok:true, data });
+    res.json({ ok:true, summary, categories, reports });
   } catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
