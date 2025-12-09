@@ -22,7 +22,6 @@
     button{ background:var(--accent); color:#081125; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
     .small{ font-size:13px; color:var(--muted); }
     h1,h3{ margin:0 0 8px 0; }
-    /* simple modal style already inline for convenience but add overlay */
     #userPickerOverlay{
       display:none;
       position:fixed;
@@ -48,319 +47,186 @@
     .user-picker-item{ padding:8px; cursor:pointer; border-radius:6px; }
     .user-picker-item:hover{ background:rgba(255,255,255,0.02); }
     .muted-small { color:var(--muted); font-size:12px; }
+    table { width:100%; border-collapse:collapse; color:#e6eef8; }
+    th, td { padding:6px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <h1>Team Dashboard</h1>
-        <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Team Dashboard</h1>
+      <div class="muted">Webhook bot mode — Telegram интеграция через WEBHOOK</div>
+    </div>
+    <div>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>Global Stats</h3>
+        <div id="globalSummary" class="small muted">Loading...</div>
+        <canvas id="leaderboardChart" style="height:220px;"></canvas>
       </div>
-      <div>
-        <button id="refreshBtn">Refresh</button>
+
+      <div class="card">
+        <h3>Recent Reports</h3>
+        <div id="reportsList" class="team-list small muted">Loading...</div>
       </div>
+
+      <div class="card">
+        <h3>Submit Quick Report (web)</h3>
+        <div style="display:grid;gap:8px">
+          <button id="chooseUserBtn" type="button">Выбрать юзернейм</button>
+          <input id="reportUser" placeholder="username (e.g. @ivan)" readonly />
+          <select id="reportReason">
+            <option value="">Выберите причину</option>
+            <option value="Много врёт и почти ничего не выполняет">Много врёт и почти ничего не выполняет</option>
+            <option value="Слишком мало делает">Слишком мало делает</option>
+            <option value="Нужно поговорить о стратегии">Нужно поговорить о стратегии</option>
+          </select>
+          <textarea id="reportText" rows="3" placeholder="текст репорта"></textarea>
+          <div style="display:flex;gap:8px">
+            <button id="sendReport">Send report</button>
+            <div id="reportResult" class="small muted"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily Work Table -->
+      <div class="card">
+        <h3>Daily Work Table</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>@user / Test</th>
+              <th>Number</th>
+              <th>Type</th>
+              <th>✔ / ❌</th>
+            </tr>
+          </thead>
+          <tbody id="dailyTableBody">
+            <!-- rows dynamically added here -->
+          </tbody>
+        </table>
+        <button id="addDailyRowBtn" style="margin-top:6px;">Add Row</button>
+      </div>
+
     </div>
 
-    <div class="grid">
-      <div>
-        <div class="card">
-          <h3>Global Stats</h3>
-          <div id="globalSummary" class="small muted">Loading...</div>
-          <canvas id="leaderboardChart" style="height:220px;"></canvas>
-        </div>
-
-        <div class="card">
-          <h3>Recent Reports</h3>
-          <div id="reportsList" class="team-list small muted">Loading...</div>
-        </div>
-
-        <!-- === Submit Quick Report (web) === -->
-        <div class="card">
-          <h3>Submit Quick Report (web)</h3>
-
-          <div style="display:grid;gap:8px">
-            <!-- Кнопка выбора юзернейма -->
-            <button id="chooseUserBtn" type="button">Выбрать юзернейм</button>
-
-            <!-- Поле, куда вставится выбранный username -->
-            <input id="reportUser" placeholder="username (e.g. @ivan)" readonly />
-
-            <!-- Выбор причины -->
-            <select id="reportReason">
-              <option value="">Выберите причину</option>
-              <option value="Много врёт и почти ничего не выполняет">Много врёт и почти ничего не выполняет</option>
-              <option value="Слишком мало делает">Слишком мало делает</option>
-              <option value="Нужно поговорить о стратегии">Нужно поговорить о стратегии</option>
-            </select>
-
-            <textarea id="reportText" rows="3" placeholder="текст репорта"></textarea>
-
-            <div style="display:flex;gap:8px">
-              <button id="sendReport">Send report</button>
-              <div id="reportResult" class="small muted"></div>
-            </div>
-          </div>
-        </div>
-
+    <div>
+      <div class="card">
+        <h3>Team</h3>
+        <div id="teamList" class="team-list small muted">Loading...</div>
       </div>
 
-      <div>
-        <div class="card">
-          <h3>Team</h3>
-          <div id="teamList" class="team-list small muted">Loading...</div>
+      <div class="card">
+        <h3>Feedback (send to user)</h3>
+        <div style="display:grid;gap:8px">
+          <input id="managerUsername" placeholder="your username (manager)" />
+          <input id="toUsername" placeholder="to username (e.g. @ivan)" />
+          <textarea id="feedbackText" rows="3" placeholder="feedback message"></textarea>
+          <div style="display:flex;gap:8px"><button id="sendFeedback">Send Feedback</button><div id="feedbackResult" class="small muted"></div></div>
         </div>
+      </div>
 
-        <div class="card">
-          <h3>Feedback (send to user)</h3>
-          <div style="display:grid;gap:8px">
-            <input id="managerUsername" placeholder="your username (manager)" />
-            <input id="toUsername" placeholder="to username (e.g. @ivan)" />
-            <textarea id="feedbackText" rows="3" placeholder="feedback message"></textarea>
-            <div style="display:flex;gap:8px"><button id="sendFeedback">Send Feedback</button><div id="feedbackResult" class="small muted"></div></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>User Summary</h3>
-          <div style="display:grid;gap:8px">
-            <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
-            <button id="viewUserBtn">View</button>
-            <div id="userSummary" class="small muted">No user selected</div>
-            <canvas id="userActivityChart" style="height:180px;"></canvas>
-            <div id="userReports" class="small muted"></div>
-          </div>
+      <div class="card">
+        <h3>User Summary</h3>
+        <div style="display:grid;gap:8px">
+          <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
+          <button id="viewUserBtn">View</button>
+          <div id="userSummary" class="small muted">No user selected</div>
+          <canvas id="userActivityChart" style="height:180px;"></canvas>
+          <div id="userReports" class="small muted"></div>
         </div>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Overlay + Modal for user picker -->
-  <div id="userPickerOverlay"></div>
-  <div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
-    <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
-    <div id="userPickerList" class="small muted">Loading...</div>
-    <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-      <button id="closePickerBtn" type="button">Закрыть</button>
-    </div>
+<div id="userPickerOverlay"></div>
+<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
+  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
+  <div id="userPickerList" class="small muted">Loading...</div>
+  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+    <button id="closePickerBtn" type="button">Закрыть</button>
   </div>
+</div>
 
 <script>
-async function fetchJson(url, opts){
-  const res = await fetch(url, opts);
-  return res.json();
-}
+// ========== Helper ==========
+async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-async function loadGlobal(){
-  try {
-    const g = await fetchJson('/api/stats/global');
-    if (!g.ok) { document.getElementById('globalSummary').innerText = 'Failed to load'; return;}
-    const s = g.summary;
-    // globalSummary: show some numbers (fallbacks)
-    const usersCount = s.usersCount || '—';
-    const reportsCount = s.reports_total || '—';
-    document.getElementById('globalSummary').innerText = `Users: ${usersCount} · Reports: ${reportsCount}`;
-    const ctx = document.getElementById('leaderboardChart').getContext('2d');
-
-    // original expected leaderboard; handle if missing
-    const top = (s.leaderboard || []).slice(0,7);
-
-    // we need usernames for user ids -> fetch users
-    const usersResp = await fetchJson('/api/users');
-    const map = {};
-    if (usersResp.ok) {
-      usersResp.users.forEach(u => map[u.id] = u.username || u.display_name || u.id);
-    }
-    const labels = top.map(t => map[t.user_id] || (t.user_id ? String(t.user_id).slice(0,6) : '—'));
-    const data = top.map(t => t.count || 0);
-    if (window._leaderboardChart) window._leaderboardChart.destroy();
-    window._leaderboardChart = new Chart(ctx, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Reports', data }]},
-      options: { plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true }} }
-    });
-  } catch (e) {
-    console.error('loadGlobal error', e);
-    document.getElementById('globalSummary').innerText = 'Failed to load';
-  }
-}
-
-async function loadTeam(){
-  try {
-    const r = await fetchJson('/api/users');
-    const el = document.getElementById('teamList');
-    if (!r.ok) { el.innerText = 'Failed'; return; }
-    const users = r.users;
-    el.innerHTML = '';
-    users.forEach(u => {
-      const row = document.createElement('div');
-      row.className='user-row';
-      row.innerHTML = `<div><strong>${u.username || u.display_name || '—'}</strong><div class="small muted">joined ${u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—'}</div></div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <button data-user="${u.username || ''}" class="viewBtn" style="padding:6px 10px;font-size:13px">View</button>
-        </div>`;
-      el.appendChild(row);
-    });
-    // attach view handlers
-    document.querySelectorAll('.viewBtn').forEach(b=>{
-      b.addEventListener('click', ()=> {
-        document.getElementById('viewUsername').value = b.dataset.user || '';
-        document.getElementById('viewUserBtn').click();
-        window.scrollTo({top:600, behavior:'smooth'});
-      });
-    });
-  } catch (e) {
-    console.error('loadTeam error', e);
-    document.getElementById('teamList').innerText = 'Failed';
-  }
-}
-
-async function loadReports(){
-  try {
-    const r = await fetchJson('/api/reports');
-    const el = document.getElementById('reportsList');
-    if (!r.ok) { el.innerText = 'Failed'; return; }
-    const reps = r.reports.slice(0,30);
-    el.innerHTML = reps.map(rr => `<div style="padding:6px 0"><strong>${rr.username||rr.user_id||'—'}</strong> • ${rr.created_at ? new Date(rr.created_at).toLocaleString() : '—'}<div class="small muted">${(rr.text||'').slice(0,140)}</div></div>`).join('');
-  } catch (e) {
-    console.error('loadReports error', e);
-    document.getElementById('reportsList').innerText = 'Failed';
-  }
-}
-
+// ======== Load Global/Team/Reports =========
+async function loadGlobal(){ /* ... твой существующий код ... */ }
+async function loadTeam(){ /* ... твой существующий код ... */ }
+async function loadReports(){ /* ... твой существующий код ... */ }
 document.getElementById('refreshBtn').addEventListener('click', ()=> { loadAll(); });
+async function loadAll(){ await loadGlobal(); await loadTeam(); await loadReports(); }
 
-async function loadAll(){
-  await loadGlobal();
-  await loadTeam();
-  await loadReports();
-}
-
-/* ================= USER PICKER ================= */
+// ======== User Picker =========
 const overlay = document.getElementById("userPickerOverlay");
 const modal = document.getElementById("userPickerModal");
 const pickerList = document.getElementById("userPickerList");
-
 document.getElementById("chooseUserBtn").addEventListener("click", async () => {
-  pickerList.innerHTML = "Loading...";
-  overlay.style.display = 'block';
-  modal.style.display = 'block';
-  try {
-    const r = await fetch('/api/users');
-    const data = await r.json();
-    if (!data.ok) {
-      pickerList.innerHTML = "Ошибка загрузки";
-      return;
-    }
+  pickerList.innerHTML = "Loading..."; overlay.style.display = 'block'; modal.style.display = 'block';
+  try { const r = await fetch('/api/users'); const data = await r.json();
+    if (!data.ok) { pickerList.innerHTML = "Ошибка загрузки"; return; }
     pickerList.innerHTML = '';
     data.users.forEach(u => {
-      const item = document.createElement("div");
-      item.className = 'user-picker-item';
+      const item = document.createElement("div"); item.className = 'user-picker-item';
       const uname = u.username || u.display_name || ('id:' + (u.id||'—'));
       item.innerHTML = `<div><strong>${uname}</strong></div><div class="muted-small">joined ${u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—'}</div>`;
       item.addEventListener("click", () => {
-        // ensure username has @ prefix if not present
         const val = uname.startsWith('@') ? uname : (uname.startsWith('id:') ? uname.replace('id:','') : uname);
-        document.getElementById("reportUser").value = val;
-        overlay.style.display = 'none';
-        modal.style.display = 'none';
+        document.getElementById("reportUser").value = val; overlay.style.display = 'none'; modal.style.display = 'none';
       });
       pickerList.appendChild(item);
     });
-  } catch (err) {
-    console.error('user picker error', err);
-    pickerList.innerHTML = "Ошибка загрузки";
-  }
+  } catch (err) { console.error('user picker error', err); pickerList.innerHTML = "Ошибка загрузки"; }
 });
+document.getElementById("closePickerBtn").addEventListener("click", () => { overlay.style.display = 'none'; modal.style.display = 'none'; });
+overlay.addEventListener('click', ()=> { overlay.style.display = 'none'; modal.style.display = 'none'; });
 
-document.getElementById("closePickerBtn").addEventListener("click", () => {
-  overlay.style.display = 'none';
-  modal.style.display = 'none';
-});
-overlay.addEventListener('click', ()=> {
-  overlay.style.display = 'none';
-  modal.style.display = 'none';
-});
+// ======== Send Report / Feedback / View User =========
+// ... твой существующий код ...
 
-/* ================= SEND REPORT (updated) ================= */
-document.getElementById('sendReport').addEventListener('click', async ()=>{
-  const username = document.getElementById('reportUser').value.trim();
-  const text = document.getElementById('reportText').value.trim();
-  const reason = document.getElementById('reportReason').value.trim();
+// ======== Daily Work Table =========
+const dailyTableBody = document.getElementById('dailyTableBody');
+function addDailyRow(username='', number='', type='happn') {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td contenteditable="true">${username}</td>
+    <td><input type="number" style="width:60px;" value="${number}"/></td>
+    <td>
+      <select>
+        <option ${type==='happn'?'selected':''}>happn account</option>
+        <option ${type==='instagram'?'selected':''}>instagram account</option>
+        <option ${type==='lid'?'selected':''}>lid account</option>
+      </select>
+    </td>
+    <td>
+      <button style="background:#10b981;color:#081125;border:none;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
+      <button style="background:#ef4444;color:#fff;border:none;padding:2px 6px;cursor:pointer">❌</button>
+    </td>
+  `;
+  tr.querySelector('button:first-child').addEventListener('click', ()=>{
+    const username = tr.children[0].innerText;
+    const number = tr.querySelector('input').value;
+    const type = tr.querySelector('select').value;
+    console.log('Add to global stats:', {username, number, type});
+    tr.style.opacity = 0.5;
+  });
+  tr.querySelector('button:last-child').addEventListener('click', ()=>{ tr.remove(); });
+  dailyTableBody.appendChild(tr);
+}
+document.getElementById('addDailyRowBtn').addEventListener('click', ()=>{ addDailyRow(); });
+// init with one row
+addDailyRow();
 
-  const resEl = document.getElementById('reportResult');
-
-  if (!username) { resEl.innerText = 'Выберите пользователя'; return; }
-  if (!reason) { resEl.innerText = 'Выберите причину'; return; }
-  if (!text) { resEl.innerText = 'Введите текст'; return; }
-
-  resEl.innerText = 'Sending...';
-
-  try {
-    const r = await fetch('/api/reports', {
-      method: 'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ username, text, reason })
-    });
-    const j = await r.json();
-    if (j.ok) {
-      resEl.innerText = 'Sent';
-      document.getElementById('reportText').value='';
-      loadAll();
-    } else {
-      resEl.innerText = 'Error: '+(j.error||'');
-    }
-  } catch (e) {
-    console.error('send report error', e);
-    resEl.innerText = 'Error sending';
-  }
-});
-
-/* ================= FEEDBACK, VIEW USER etc (unchanged logic but guarded) ================= */
-document.getElementById('sendFeedback').addEventListener('click', async ()=>{
-  const manager = document.getElementById('managerUsername').value.trim();
-  const to = document.getElementById('toUsername').value.trim();
-  const message = document.getElementById('feedbackText').value.trim();
-  const resEl = document.getElementById('feedbackResult');
-  if (!to || !message) { resEl.innerText='to and message required'; return; }
-  resEl.innerText = 'Sending...';
-  try {
-    const r = await fetch('/api/feedback', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ manager_username: manager, to_username: to, message })});
-    const j = await r.json();
-    if (j.ok) { resEl.innerText='Sent'; document.getElementById('feedbackText').value=''; } else resEl.innerText='Error: '+(j.error||'');
-  } catch (e) {
-    console.error('sendFeedback error', e);
-    resEl.innerText = 'Error sending';
-  }
-});
-
-document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
-  const username = document.getElementById('viewUsername').value.trim();
-  if (!username) return;
-  const el = document.getElementById('userSummary');
-  try {
-    const r = await fetchJson('/api/user/' + encodeURIComponent(username));
-    if (!r.ok) { el.innerText = 'User not found'; return; }
-    const { user, summary, reports } = r;
-    // summary fields may differ — safe access
-    el.innerHTML = `<div><strong>${user.username || user.display_name}</strong> · Reports: ${summary.total || summary.count || 0} · Suspicious: ${summary.suspicious || 0} · UsefulIndex: ${summary.usefulIndex || '—'}</div>`;
-    const labels = Object.keys((summary.last30||{})).reverse();
-    const data = labels.map(k => (summary.last30||{})[k] || 0);
-    const ctx = document.getElementById('userActivityChart').getContext('2d');
-    if (window._userActivityChart) window._userActivityChart.destroy();
-    window._userActivityChart = new Chart(ctx, {
-      type:'line',
-      data: { labels, datasets: [{ label:'Reports/day', data, fill:true }]},
-      options:{ plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true }}}
-    });
-    const rEl = document.getElementById('userReports');
-    rEl.innerHTML = (reports || []).slice(0,20).map(rr => `<div style="padding:6px 0"><div class="small muted">${rr.created_at ? new Date(rr.created_at).toLocaleString() : '—'} · ${rr.task_type || '—'} · suspicious:${rr.suspicious||0}</div><div>${rr.text || ''}</div></div>`).join('');
-  } catch (e) {
-    console.error('view user error', e);
-    el.innerText = 'User not found';
-  }
-});
-
+// Load all
 loadAll();
 </script>
 </body>

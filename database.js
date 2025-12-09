@@ -24,6 +24,7 @@ export function init() {
         length INTEGER,
         suspicious INTEGER,
         created_at INTEGER,
+        status TEXT DEFAULT 'pending',
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -51,10 +52,7 @@ export function ensureUserByTelegram(telegram_id, username, display) {
       [telegram_id],
       (err, row) => {
         if (err) return reject(err);
-
-        if (row) {
-          return resolve(row);
-        }
+        if (row) return resolve(row);
 
         db.run(
           `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
@@ -182,8 +180,22 @@ export function globalSummary() {
          COUNT(*) AS reports_total,
          SUM(length) AS total_length,
          SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
-       FROM reports`,
+       FROM reports
+       WHERE status = 'approved'`,
       (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+export function updateReportStatus(id, status) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE reports SET status = ? WHERE id = ?`,
+      [status, id],
+      function (err) {
+        if (err) return reject(err);
+        resolve(true);
+      }
     );
   });
 }
