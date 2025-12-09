@@ -1,56 +1,34 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Team Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    :root{
-      --bg:#0f1724; --card:#111827; --muted:#9ca3af; --accent:#f59e0b;
-    }
-    html,body{ height:100%; margin:0; padding:0; }
-    body{ font-family: Inter,Arial,Helvetica,sans-serif; background:linear-gradient(180deg,#0b1220,#0f1724); color:#e6eef8; }
-    .wrap{ max-width:1200px; margin:24px auto; padding:20px; }
-    .top{ display:flex; gap:12px; align-items:center; justify-content:space-between; }
-    .card{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; box-shadow: 0 6px 18px rgba(2,6,23,0.6); margin-bottom:12px; }
-    .grid{ display:grid; grid-template-columns: 1fr 420px; gap:16px; }
-    .team-list{ max-height:540px; overflow:auto; padding:8px; }
-    .user-row{ display:flex; justify-content:space-between; padding:8px; border-bottom:1px dashed rgba(255,255,255,0.03); }
-    .muted{ color:var(--muted); font-size:13px; }
-    input, textarea, select{ width:100%; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.04); background:transparent; color:inherit; box-sizing:border-box; }
-    button{ background:var(--accent); color:#081125; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:600; }
-    .small{ font-size:13px; color:var(--muted); }
-    h1,h3{ margin:0 0 8px 0; }
-    #userPickerOverlay{
-      display:none;
-      position:fixed;
-      inset:0;
-      background:rgba(0,0,0,0.45);
-      z-index:1999;
-    }
-    #userPickerModal{
-      display:none;
-      position:fixed;
-      top:20%;
-      left:50%;
-      transform:translateX(-50%);
-      background:var(--card);
-      padding:16px;
-      border-radius:10px;
-      box-shadow:0 0 30px rgba(0,0,0,0.6);
-      width:320px;
-      max-height:60%;
-      overflow-y:auto;
-      z-index:2000;
-    }
-    .user-picker-item{ padding:8px; cursor:pointer; border-radius:6px; }
-    .user-picker-item:hover{ background:rgba(255,255,255,0.02); }
-    .muted-small { color:var(--muted); font-size:12px; }
-    table { width:100%; border-collapse:collapse; color:#e6eef8; }
-    th, td { padding:6px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; }
-    td input, td select { width:auto; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Team Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root{--bg:#0f1724;--card:#111827;--muted:#9ca3af;--accent:#f59e0b;}
+html,body{height:100%;margin:0;padding:0;}
+body{font-family:Inter,Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#0b1220,#0f1724);color:#e6eef8;}
+.wrap{max-width:1200px;margin:24px auto;padding:20px;}
+.top{display:flex;gap:12px;align-items:center;justify-content:space-between;}
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:16px;box-shadow: 0 6px 18px rgba(2,6,23,0.6);margin-bottom:12px;}
+.grid{display:grid;grid-template-columns:1fr 420px;gap:16px;}
+.team-list{max-height:540px;overflow:auto;padding:8px;}
+.user-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);}
+.muted{color:var(--muted);font-size:13px;}
+input,textarea,select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;box-sizing:border-box;}
+button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
+.small{font-size:13px;color:var(--muted);}
+h1,h3{margin:0 0 8px 0;}
+#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
+#userPickerModal{display:none;position:fixed;top:20%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:320px;max-height:60%;overflow-y:auto;z-index:2000;}
+.user-picker-item{padding:8px;cursor:pointer;border-radius:6px;}
+.user-picker-item:hover{background:rgba(255,255,255,0.02);}
+.muted-small{color:var(--muted);font-size:12px;}
+table{width:100%;border-collapse:collapse;color:#e6eef8;}
+th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
+td input,td select{width:auto;}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -73,44 +51,13 @@
       </div>
 
       <div class="card">
-        <h3>Recent Reports</h3>
-        <div id="reportsList" class="team-list small muted">Loading...</div>
-      </div>
-
-      <div class="card">
-        <h3>Submit Quick Report (web)</h3>
-        <div style="display:grid;gap:8px">
-          <button id="chooseUserBtn" type="button">Выбрать юзернейм</button>
-          <input id="reportUser" placeholder="username (e.g. @ivan)" readonly />
-          <select id="reportReason">
-            <option value="">Выберите причину</option>
-            <option value="Много врёт и почти ничего не выполняет">Много врёт и почти ничего не выполняет</option>
-            <option value="Слишком мало делает">Слишком мало делает</option>
-            <option value="Нужно поговорить о стратегии">Нужно поговорить о стратегии</option>
-          </select>
-          <textarea id="reportText" rows="3" placeholder="текст репорта"></textarea>
-          <div style="display:flex;gap:8px">
-            <button id="sendReport">Send report</button>
-            <div id="reportResult" class="small muted"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Daily Work Table -->
-      <div class="card">
-        <h3>Daily Work Table</h3>
+        <h3>Pending Reports</h3>
         <table>
           <thead>
-            <tr>
-              <th>@user / Test</th>
-              <th>Number</th>
-              <th>Type</th>
-              <th>✔ / ❌</th>
-            </tr>
+            <tr><th>@user</th><th>Text</th><th>Type</th><th>✔ / ❌</th></tr>
           </thead>
           <tbody id="dailyTableBody"></tbody>
         </table>
-        <button id="addDailyRowBtn" style="margin-top:6px;">Add Row</button>
       </div>
     </div>
 
@@ -118,19 +65,6 @@
       <div class="card">
         <h3>Team</h3>
         <div id="teamList" class="team-list small muted">Loading...</div>
-      </div>
-
-      <div class="card">
-        <h3>Feedback (send to user)</h3>
-        <div style="display:grid;gap:8px">
-          <input id="managerUsername" placeholder="your username (manager)" />
-          <input id="toUsername" placeholder="to username (e.g. @ivan)" />
-          <textarea id="feedbackText" rows="3" placeholder="feedback message"></textarea>
-          <div style="display:flex;gap:8px">
-            <button id="sendFeedback">Send Feedback</button>
-            <div id="feedbackResult" class="small muted"></div>
-          </div>
-        </div>
       </div>
 
       <div class="card">
@@ -159,71 +93,70 @@
 <script>
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-// ======== Load functions ========
-async function loadGlobal(){ /* оставляем твой код */ }
-async function loadTeam(){ /* оставляем твой код */ }
-async function loadReports(){ /* оставляем твой код */ }
-document.getElementById('refreshBtn').addEventListener('click', ()=>{ loadAll(); });
-async function loadAll(){ await loadGlobal(); await loadTeam(); await loadReports(); }
-
-// ======== User Picker =========
-const overlay = document.getElementById("userPickerOverlay");
-const modal = document.getElementById("userPickerModal");
-const pickerList = document.getElementById("userPickerList");
-document.getElementById("chooseUserBtn").addEventListener("click", async () => {
-  pickerList.innerHTML = "Loading..."; overlay.style.display = 'block'; modal.style.display = 'block';
-  try { const r = await fetch('/api/users'); const data = await r.json();
-    if(!data.ok){ pickerList.innerHTML="Ошибка загрузки"; return; }
-    pickerList.innerHTML='';
-    data.users.forEach(u=>{
-      const item = document.createElement("div"); item.className='user-picker-item';
-      const uname = u.username || u.display_name || ('id:' + (u.id||'—'));
-      item.innerHTML = `<div><strong>${uname}</strong></div><div class="muted-small">joined ${u.joined_at?new Date(u.joined_at).toLocaleDateString():'—'}</div>`;
-      item.addEventListener("click", ()=> {
-        const val = uname.startsWith('@') ? uname : uname.replace('id:','');
-        document.getElementById("reportUser").value=val;
-        overlay.style.display='none'; modal.style.display='none';
-      });
-      pickerList.appendChild(item);
-    });
-  } catch(err){ console.error(err); pickerList.innerHTML="Ошибка загрузки"; }
-});
-document.getElementById("closePickerBtn").addEventListener("click", ()=>{ overlay.style.display='none'; modal.style.display='none'; });
-overlay.addEventListener('click', ()=>{ overlay.style.display='none'; modal.style.display='none'; });
-
-// ======== Daily Work Table =========
 const dailyTableBody = document.getElementById('dailyTableBody');
-function addDailyRow(username='', number='', type='happn'){
-  const tr = document.createElement('tr');
-  tr.innerHTML=`
-    <td contenteditable="true">${username}</td>
-    <td><input type="number" style="width:60px;" value="${number}"/></td>
-    <td>
-      <select>
-        <option ${type==='happn'?'selected':''}>happn account</option>
-        <option ${type==='instagram'?'selected':''}>instagram account</option>
-        <option ${type==='lid'?'selected':''}>lid account</option>
-      </select>
-    </td>
-    <td>
-      <button style="background:#10b981;color:#081125;border:none;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
-      <button style="background:#ef4444;color:#fff;border:none;padding:2px 6px;cursor:pointer">❌</button>
-    </td>
-  `;
-  tr.querySelector('button:first-child').addEventListener('click', ()=>{
-    const username = tr.children[0].innerText.trim();
-    const number = tr.querySelector('input').value;
-    const type = tr.querySelector('select').value;
-    console.log('Add to global stats:', {username, number, type});
-    tr.style.opacity=0.5;
-  });
-  tr.querySelector('button:last-child').addEventListener('click', ()=>{ tr.remove(); });
-  dailyTableBody.appendChild(tr);
-}
-document.getElementById('addDailyRowBtn').addEventListener('click', ()=>{ addDailyRow(); });
-addDailyRow(); // init
 
-loadAll();
+// ==== Load Pending Reports ====
+async function loadReportsTable() {
+  dailyTableBody.innerHTML = '';
+  try {
+    const r = await fetchJson('/api/reports');
+    if(!r.ok) { dailyTableBody.innerHTML='<tr><td colspan="4">Ошибка загрузки</td></tr>'; return; }
+    r.reports.filter(rep=>rep.status==='pending').forEach(rep=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${rep.username||'—'}</td>
+        <td>${rep.text}</td>
+        <td>${rep.task_type||'—'}</td>
+        <td>
+          <button style="background:#10b981;color:#081125;border:none;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
+          <button style="background:#ef4444;color:#fff;border:none;padding:2px 6px;cursor:pointer">❌</button>
+        </td>
+      `;
+      tr.querySelector('button:first-child').addEventListener('click', async ()=>{
+        await fetch(`/api/reports/${rep.id}/approve`,{method:'POST'});
+        tr.remove(); loadGlobal(); loadLeaderboard();
+      });
+      tr.querySelector('button:last-child').addEventListener('click', async ()=>{
+        await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
+        tr.remove();
+      });
+      dailyTableBody.appendChild(tr);
+    });
+  } catch(e){ console.error(e); }
+}
+
+// ==== Global Stats / Leaderboard ====
+const globalSummaryEl = document.getElementById('globalSummary');
+const leaderboardCtx = document.getElementById('leaderboardChart').getContext('2d');
+let leaderboardChart = null;
+
+async function loadGlobal(){
+  try{
+    const g = await fetchJson('/api/stats/global');
+    if(!g.ok){ globalSummaryEl.innerText='Failed'; return; }
+    const s = g.summary;
+    globalSummaryEl.innerText = `Reports: ${s.reports_total||0} · Suspicious: ${s.suspicious_total||0}`;
+    const labels = (s.leaderboard||[]).slice(0,7).map(x=>x.user_id);
+    const data = (s.leaderboard||[]).slice(0,7).map(x=>x.count);
+    if(leaderboardChart) leaderboardChart.destroy();
+    leaderboardChart = new Chart(leaderboardCtx,{
+      type:'bar',
+      data:{labels,datasets:[{label:'Reports',data}]},
+      options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+    });
+  }catch(e){ console.error(e); globalSummaryEl.innerText='Failed'; }
+}
+
+function loadLeaderboard(){ loadGlobal(); }
+
+document.getElementById('refreshBtn').addEventListener('click', ()=>{
+  loadReportsTable();
+  loadGlobal();
+});
+
+// Initial load
+loadReportsTable();
+loadGlobal();
 </script>
 </body>
 </html>

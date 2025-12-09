@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import TelegramBot from 'node-telegram-bot-api';
-import fs from 'fs';
 import * as db from './database.js';
 
 dotenv.config();
@@ -25,111 +24,104 @@ app.use(bodyParser.json({ limit: '200kb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/', express.static(path.join(__dirname, 'public')));
 
-const LOG_FILE = path.join(process.cwd(), 'text_log.txt');
-
+// === Telegram bot webhook ===
 let bot = null;
 if (BOT_TOKEN && WEBHOOK_URL) {
   try {
     bot = new TelegramBot(BOT_TOKEN, { webHook: true });
     const webhookPath = '/tg';
     const fullWebhookUrl = WEBHOOK_URL.replace(/\/$/, '') + webhookPath;
+
     (async () => {
       await bot.setWebHook(fullWebhookUrl);
       console.log('Telegram webhook set →', fullWebhookUrl);
-    })().catch(console.error);
+    })();
 
     app.post(webhookPath, (req, res) => {
       try {
         bot.processUpdate(req.body);
         res.sendStatus(200);
-      } catch (err) { console.error(err); res.sendStatus(500); }
+      } catch (err) {
+        console.error('Bot processUpdate error', err);
+        res.sendStatus(500);
+      }
     });
 
-    // Стартовое сообщение
     bot.onText(/\/start/, async (msg) => {
       const chatId = msg.chat.id;
       const username = msg.from.username || null;
       const display = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
       await db.ensureUserByTelegram(String(chatId), username, display);
-      await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}! Ты зарегистрирован.`);
+      await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}!`);
     });
 
-    // Логирование текста + запись в базу
+    // Catch all text messages (no commands)
     bot.on('message', async (msg) => {
       if (!msg.text || msg.text.startsWith('/')) return;
 
       const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
-      const chatId = msg.chat.id;
+      const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
 
-      // Лог в text_log.txt
-      const logEntry = `${username}: ${msg.text}\n`;
-      try { fs.appendFileSync(LOG_FILE, logEntry, 'utf8'); } catch(e){ console.error(e); }
+      // Add pending report
+      await db.addReport({
+        user_id: user.id,
+        text: msg.text,
+        created_at: Date.now()
+      });
 
-      // Сохранение как репорт
-      try {
-        const user = await db.ensureUserByTelegram(String(chatId), msg.from.username, username);
-        await db.addReport({ user_id: user.id, text: msg.text, created_at: Date.now() });
-
-        if (BOT_ADMIN_ID) {
-          await bot.sendMessage(BOT_ADMIN_ID, `🚨 Новый репорт от ${username}:\n${msg.text}`);
-        }
-
-        await bot.sendMessage(chatId, 'Ваш репорт успешно добавлен в статистику!');
-      } catch(e){ 
-        console.error('Ошибка добавления репорта:', e);
-        await bot.sendMessage(chatId, 'Ошибка при добавлении репорта.'); 
+      // Notify admin
+      if (BOT_ADMIN_ID) {
+        await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый репорт от ${username}: ${msg.text}`);
       }
+
+      // Confirm receipt
+      await bot.sendMessage(msg.chat.id, 'Ваш отчет получен и ожидает одобрения.');
     });
-
-    // Команда /report для ручного добавления
-    bot.onText(/\/report (.+)/, async (msg, match) => {
-      const chatId = msg.chat.id;
-      const text = match[1];
-      const username = msg.from.username ? `@${msg.from.username}` : chatId;
-      try {
-        const user = await db.ensureUserByTelegram(String(chatId), msg.from.username, username);
-        await db.addReport({ user_id: user.id, text, created_at: Date.now() });
-
-        if (BOT_ADMIN_ID) await bot.sendMessage(BOT_ADMIN_ID, `🚨 Репорт от ${username}: ${text}`);
-        await bot.sendMessage(chatId, 'Репорт добавлен в статистику!');
-      } catch(e){
-        console.error(e);
-        await bot.sendMessage(chatId, 'Ошибка при добавлении репорта.');
-      }
-    });
-
-  } catch(err){ console.error('Telegram init error', err); bot = null; }
+  } catch (err) {
+    console.error('Telegram init error', err);
+    bot = null;
+  }
 }
 
 // === API ===
-app.get('/api/health', (req,res)=>res.json({ ok:true }));
+app.get('/api/stats/global', async (req, res) => {
+  try {
+    const summary = await db.globalSummary();
+    // build leaderboard
+    const users = await db.listUsers();
+    const reports = await db.listReports();
+    const leaderboardMap = {};
+    reports.filter(r => r.status==='approved').forEach(r => {
+      leaderboardMap[r.user_id] = (leaderboardMap[r.user_id]||0)+1;
+    });
+    const leaderboard = Object.keys(leaderboardMap).map(uid => ({ user_id: uid, count: leaderboardMap[uid] }));
+    leaderboard.sort((a,b)=>b.count-a.count);
 
-app.get('/api/users', async (req,res)=>{
-  try { const users = await db.listUsers(); res.json({ ok:true, users }); }
-  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
+    res.json({ ok: true, summary: { ...summary, leaderboard } });
+  } catch (e) {
+    console.error(e);
+    res.json({ ok: false, error: e.message });
+  }
 });
 
-app.get('/api/reports', async (req,res)=>{
-  try { const reports = await db.listReports(1000); res.json({ ok:true, reports }); }
-  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
+app.get('/api/users', async (req,res)=> {
+  try { const users = await db.listUsers(); res.json({ ok:true, users }); } 
+  catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-app.post('/api/reports', async (req,res)=>{
-  try{
-    const { username, text, reason } = req.body;
-    if(!username||!text||!reason) return res.status(400).json({ ok:false, error:'username, text, reason required' });
-    let user = await db.getUserByUsername(username);
-    if(!user) user = await db.ensureUserByTelegram(`web-${Date.now()}`, username, username);
-    const rep = await db.addReport({ user_id:user.id, text:`[${reason}] ${text}`, created_at:Date.now() });
-    if(bot && BOT_ADMIN_ID) await bot.sendMessage(BOT_ADMIN_ID, `🚨 Ручной репорт от ${username}: ${text}`);
-    res.json({ ok:true, report:rep });
-  }catch(err){ res.status(500).json({ ok:false, error:err.message }); }
+app.get('/api/reports', async (req,res)=> {
+  try { const reports = await db.listReports(); res.json({ ok:true, reports }); } 
+  catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
-// Глобальная статистика
-app.get('/api/stats/global', async (req,res)=>{
-  try{ const s = await db.globalSummary(); res.json({ ok:true, summary:s }); }
-  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
+app.post('/api/reports/:id/approve', async (req,res)=>{
+  try { await db.updateReportStatus(req.params.id,'approved'); res.json({ ok:true }); } 
+  catch(e){ res.json({ ok:false, error:e.message }); }
+});
+
+app.post('/api/reports/:id/reject', async (req,res)=>{
+  try { await db.updateReportStatus(req.params.id,'rejected'); res.json({ ok:true }); } 
+  catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
 // SPA fallback
