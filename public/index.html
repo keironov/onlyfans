@@ -20,6 +20,11 @@ input,textarea,select{width:100%;padding:6px;border-radius:6px;border:1px solid 
 button{background:var(--accent);color:#081125;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:600;}
 .small{font-size:13px;color:var(--muted);}
 h1,h3{margin:0 0 8px 0;}
+#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
+#userPickerModal{display:none;position:fixed;top:20%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:320px;max-height:60%;overflow-y:auto;z-index:2000;}
+.user-picker-item{padding:8px;cursor:pointer;border-radius:6px;}
+.user-picker-item:hover{background:rgba(255,255,255,0.02);}
+.muted-small{color:var(--muted);font-size:12px;}
 table{width:100%;border-collapse:collapse;color:#e6eef8;}
 th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
 td input,td select{width:auto;}
@@ -41,9 +46,9 @@ td input,td select{width:auto;}
     <div>
       <div class="card">
         <h3>Global Stats</h3>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span class="small muted" id="globalSummary">Loading...</span>
-          <select id="globalPeriod" style="width:120px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div id="globalSummary" class="small muted">Loading...</div>
+          <select id="periodSelect">
             <option value="today">Сегодня</option>
             <option value="yesterday">Вчера</option>
             <option value="week">Неделя</option>
@@ -54,7 +59,7 @@ td input,td select{width:auto;}
       </div>
 
       <div class="card">
-        <h3>Pending Reports (ОТЧЕТ)</h3>
+        <h3>Отчеты</h3>
         <table>
           <thead>
             <tr><th>@user</th><th>Text</th><th>Number</th><th>Type</th><th>✔ / ❌</th></tr>
@@ -77,173 +82,197 @@ td input,td select{width:auto;}
           <button id="viewUserBtn">View</button>
           <div id="userSummary" class="small muted">No user selected</div>
           <canvas id="userActivityChart" style="height:180px;"></canvas>
-          <pre id="userReports" class="small muted" style="white-space:pre-wrap;"></pre>
         </div>
       </div>
     </div>
   </div>
 </div>
 
+<div id="userPickerOverlay"></div>
+<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
+  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
+  <div id="userPickerList" class="small muted">Loading...</div>
+  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+    <button id="closePickerBtn" type="button">Закрыть</button>
+  </div>
+</div>
+
 <script>
+const reportsTable = document.getElementById('reportsTable');
+const teamListEl = document.getElementById('teamList');
+const globalSummaryEl = document.getElementById('globalSummary');
+const globalChartCtx = document.getElementById('globalChart').getContext('2d');
+let globalChart = null;
+
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-// ====== Global Stats (Donut) ======
-const globalCtx = document.getElementById('globalChart').getContext('2d');
-let globalChart = null;
-let globalPeriod = 'today';
-
-async function loadGlobalChart(){
-  try{
-    const res = await fetch(`/api/stats/global?period=${globalPeriod}`);
-    const json = await res.json();
-    if(!json.ok) return;
-
-    const data = json.data;
-    const total = Object.values(data).reduce((a,b)=>a+b,0);
-    document.getElementById('globalSummary').innerText = `Всего: ${total} (${data.happn} Happn, ${data.instagram} Instagram, ${data.lid} Лиды)`;
-
-    const chartData = {
-      labels: ['Happn','Instagram','Лиды'],
-      datasets: [{
-        data: [data.happn,data.instagram,data.lid],
-        backgroundColor: ['#f59e0b','#3b82f6','#10b981'],
-        borderColor: '#0f1724',
-        borderWidth: 2
-      }]
-    };
-
-    if(globalChart) globalChart.destroy();
-    globalChart = new Chart(globalCtx,{
-      type:'doughnut',
-      data: chartData,
-      options:{
-        plugins:{legend:{position:'bottom'}},
-        cutout:'60%',
-        responsive:true
-      }
-    });
-
-  }catch(e){ console.error(e); }
-}
-document.getElementById('globalPeriod').addEventListener('change', (e)=>{
-  globalPeriod = e.target.value;
-  loadGlobalChart();
-});
-
-// ====== Pending Reports ======
-const reportsTable = document.getElementById('reportsTable');
+// ======= PENDING REPORTS =======
 async function loadReports(){
   try{
     const res = await fetchJson('/api/reports');
     if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
-
     const pendingReports = res.reports.filter(r=>r.status==='pending');
-    reportsTable.innerHTML = '';
+
+    const existingRows = {};
+    reportsTable.querySelectorAll('tr').forEach(tr=>{
+      const rid = tr.dataset.reportId;
+      if(rid){
+        const number = tr.querySelector('input')?.value || 0;
+        const type = tr.querySelector('select')?.value || 'happn';
+        existingRows[rid] = { number, type };
+      }
+    });
 
     pendingReports.forEach(rep=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML=`
-        <td>${rep.username||'—'}</td>
-        <td>${rep.text}</td>
-        <td><input type="number" value="0" style="width:60px"/></td>
-        <td>
-          <select>
-            <option value="happn">Happn</option>
-            <option value="instagram">Instagram</option>
-            <option value="lid">Лид</option>
-          </select>
-        </td>
-        <td>
-          <button style="background:#10b981;color:#081125;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
-          <button style="background:#ef4444;color:#fff;padding:2px 6px;cursor:pointer">❌</button>
-        </td>
-      `;
-      const numberInput = tr.querySelector('input');
-      const typeSelect = tr.querySelector('select');
+      let tr = reportsTable.querySelector(`tr[data-report-id="${rep.id}"]`);
+      if(!tr){
+        tr = document.createElement('tr');
+        tr.dataset.reportId = rep.id;
+        tr.innerHTML=`
+          <td>${rep.username||'—'}</td>
+          <td>${rep.text}</td>
+          <td><input type="number" value="0" style="width:60px"/></td>
+          <td>
+            <select>
+              <option value="happn">Happn</option>
+              <option value="instagram">Instagram</option>
+              <option value="lid">Лид</option>
+            </select>
+          </td>
+          <td>
+            <button style="background:#10b981;color:#081125;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
+            <button style="background:#ef4444;color:#fff;padding:2px 6px;cursor:pointer">❌</button>
+          </td>
+        `;
+        reportsTable.appendChild(tr);
 
-      tr.querySelector('button:first-child').addEventListener('click', async ()=>{
-        const number = parseInt(numberInput.value)||0;
-        const type = typeSelect.value;
-        await fetch(`/api/reports/${rep.id}/approve`,{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({number,type})
+        const numberInput = tr.querySelector('input');
+        const typeSelect = tr.querySelector('select');
+
+        tr.querySelector('button:first-child').addEventListener('click', async ()=>{
+          const number = parseInt(numberInput.value)||0;
+          const type = typeSelect.value;
+          await fetch(`/api/reports/${rep.id}/approve`,{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({number,type})
+          });
+          tr.remove();
+          loadGlobalChart();
         });
-        tr.remove();
-        loadGlobalChart();
-      });
-      tr.querySelector('button:last-child').addEventListener('click', async ()=>{
-        await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
-        tr.remove();
-      });
-      reportsTable.appendChild(tr);
+        tr.querySelector('button:last-child').addEventListener('click', async ()=>{
+          await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
+          tr.remove();
+        });
+      } else {
+        if(existingRows[rep.id]){
+          tr.querySelector('input').value = existingRows[rep.id].number;
+          tr.querySelector('select').value = existingRows[rep.id].type;
+        }
+      }
     });
   }catch(e){ console.error(e); }
 }
 
-// ====== Team List ======
-const teamListDiv = document.getElementById('teamList');
+// ======= TEAM LIST =======
 async function loadTeam(){
   try{
     const res = await fetchJson('/api/users');
-    if(!res.ok){ teamListDiv.innerText='Ошибка загрузки'; return; }
-    teamListDiv.innerHTML='';
+    if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
+    teamListEl.innerHTML='';
     res.users.forEach(u=>{
       const div = document.createElement('div');
-      div.style.display='flex'; div.style.justifyContent='space-between'; div.style.alignItems='center'; div.style.marginBottom='4px';
-      const nameSpan = document.createElement('span'); nameSpan.innerText = u.username || u.display_name;
-      const roleSelect = document.createElement('select');
-      ['работник','уборщик','бухгалтер'].forEach(role=>{
-        const opt = document.createElement('option'); opt.value=role; opt.innerText=role;
-        roleSelect.appendChild(opt);
-      });
-      div.appendChild(nameSpan); div.appendChild(roleSelect);
-      teamListDiv.appendChild(div);
+      div.className='user-row';
+      div.innerHTML=`
+        <span>${u.username||'—'}</span>
+        <select>
+          <option value="">Выбрать роль</option>
+          <option value="worker">Работник</option>
+          <option value="cleaner">Уборщик</option>
+          <option value="accountant">Бухгалтер</option>
+        </select>
+      `;
+      teamListEl.appendChild(div);
     });
   }catch(e){ console.error(e); }
 }
 
-// ====== User Summary ======
-const viewBtn = document.getElementById('viewUserBtn');
-let currentUser=null;
-viewBtn.addEventListener('click', async ()=>{
+// ======= GLOBAL CHART =======
+async function loadGlobalChart(){
+  try{
+    const period = document.getElementById('periodSelect').value;
+    const res = await fetchJson(`/api/stats/global?period=${period}`);
+    if(!res.ok){ globalSummaryEl.innerText='Ошибка'; return; }
+    const data = res.data;
+    const total = data.happn+data.instagram+data.lid;
+    globalSummaryEl.innerText = `Всего: ${total} · Happn: ${data.happn} · Instagram: ${data.instagram} · Лид: ${data.lid}`;
+
+    if(globalChart) globalChart.destroy();
+    globalChart = new Chart(globalChartCtx,{
+      type:'doughnut',
+      data:{
+        labels:['Happn','Instagram','Лид'],
+        datasets:[{
+          data:[data.happn,data.instagram,data.lid],
+          backgroundColor:['#f59e0b','#10b981','#3b82f6']
+        }]
+      },
+      options:{
+        plugins:{legend:{position:'bottom'}},
+        cutout:'60%'
+      }
+    });
+  }catch(e){ console.error(e); }
+}
+
+// ======= USER SUMMARY =======
+document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
   const username = document.getElementById('viewUsername').value.trim();
   if(!username) return;
   try{
-    const usersRes = await fetchJson('/api/users');
-    currentUser = usersRes.users.find(u=>u.username===username);
-    if(!currentUser){ document.getElementById('userSummary').innerText='Пользователь не найден'; return; }
-    updateUserSummary();
+    const users = await fetchJson('/api/users');
+    const user = users.users.find(u=>u.username===username);
+    if(!user){ document.getElementById('userSummary').innerText='Не найден'; return; }
+
+    const reports = await fetchJson('/api/reports');
+    const userReports = reports.reports.filter(r=>r.user_id===user.id && r.status==='approved');
+
+    const total = userReports.reduce((a,b)=>a+(b.number||0),0);
+    const byType = {happn:0, instagram:0, lid:0};
+    userReports.forEach(r=>{ if(r.type) byType[r.type]+=parseInt(r.number)||0; });
+
+    document.getElementById('userSummary').innerText=
+      `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
+
+    const ctx = document.getElementById('userActivityChart').getContext('2d');
+    if(window.userChart) window.userChart.destroy();
+    window.userChart = new Chart(ctx,{
+      type:'doughnut',
+      data:{
+        labels:['Happn','Instagram','Лид'],
+        datasets:[{
+          data:[byType.happn,byType.instagram,byType.lid],
+          backgroundColor:['#f59e0b','#10b981','#3b82f6']
+        }]
+      },
+      options:{cutout:'60%'}
+    });
   }catch(e){ console.error(e); }
 });
 
-async function updateUserSummary(){
-  if(!currentUser) return;
-  const reportsRes = await fetchJson('/api/reports');
-  const userReports = reportsRes.reports.filter(r=>r.user_id===currentUser.id && r.status==='approved');
-  const total = userReports.reduce((a,b)=>b.number? a+parseInt(b.number):a,0);
-  document.getElementById('userSummary').innerText = `Всего: ${total} (${userReports.length} отчета)`;
-
-  const ctx = document.getElementById('userActivityChart').getContext('2d');
-  const typeCount = {happn:0,instagram:0,lid:0};
-  userReports.forEach(r=>{ if(r.number && r.type) typeCount[r.type]+=parseInt(r.number)||0; });
-  const chartData = {labels:['Happn','Instagram','Лиды'],datasets:[{data:[typeCount.happn,typeCount.instagram,typeCount.lid],backgroundColor:['#f59e0b','#3b82f6','#10b981'],borderColor:'#0f1724',borderWidth:2}]};
-  if(window.userChart) window.userChart.destroy();
-  window.userChart = new Chart(ctx,{type:'doughnut',data:chartData,options:{plugins:{legend:{position:'bottom'}},cutout:'60%'}});
-  document.getElementById('userReports').innerText = userReports.map(r=>`${r.text} (${r.number} ${r.type})`).join('\n');
+// ======= AUTO REFRESH =======
+async function refreshAll(){
+  await loadReports();
+  await loadTeam();
+  await loadGlobalChart();
 }
 
-// ====== Auto-refresh ======
-async function autoRefresh(){
-  loadReports();
-  loadTeam();
-  loadGlobalChart();
-  updateUserSummary();
-}
-setInterval(autoRefresh, 3000); // каждые 3 секунды
+document.getElementById('refreshBtn').addEventListener('click', refreshAll);
+document.getElementById('periodSelect').addEventListener('change', loadGlobalChart);
 
-// ====== Initial Load ======
-loadReports(); loadTeam(); loadGlobalChart(); 
+// Initial load
+refreshAll();
+setInterval(refreshAll,3000);
 </script>
 </body>
 </html>
