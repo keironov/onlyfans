@@ -49,6 +49,7 @@
     .muted-small { color:var(--muted); font-size:12px; }
     table { width:100%; border-collapse:collapse; color:#e6eef8; }
     th, td { padding:6px; border-bottom:1px solid rgba(255,255,255,0.1); text-align:left; }
+    td input, td select { width:auto; }
   </style>
 </head>
 <body>
@@ -107,13 +108,10 @@
               <th>✔ / ❌</th>
             </tr>
           </thead>
-          <tbody id="dailyTableBody">
-            <!-- rows dynamically added here -->
-          </tbody>
+          <tbody id="dailyTableBody"></tbody>
         </table>
         <button id="addDailyRowBtn" style="margin-top:6px;">Add Row</button>
       </div>
-
     </div>
 
     <div>
@@ -128,7 +126,10 @@
           <input id="managerUsername" placeholder="your username (manager)" />
           <input id="toUsername" placeholder="to username (e.g. @ivan)" />
           <textarea id="feedbackText" rows="3" placeholder="feedback message"></textarea>
-          <div style="display:flex;gap:8px"><button id="sendFeedback">Send Feedback</button><div id="feedbackResult" class="small muted"></div></div>
+          <div style="display:flex;gap:8px">
+            <button id="sendFeedback">Send Feedback</button>
+            <div id="feedbackResult" class="small muted"></div>
+          </div>
         </div>
       </div>
 
@@ -156,14 +157,13 @@
 </div>
 
 <script>
-// ========== Helper ==========
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
-// ======== Load Global/Team/Reports =========
-async function loadGlobal(){ /* ... твой существующий код ... */ }
-async function loadTeam(){ /* ... твой существующий код ... */ }
-async function loadReports(){ /* ... твой существующий код ... */ }
-document.getElementById('refreshBtn').addEventListener('click', ()=> { loadAll(); });
+// ======== Load functions ========
+async function loadGlobal(){ /* оставляем твой код */ }
+async function loadTeam(){ /* оставляем твой код */ }
+async function loadReports(){ /* оставляем твой код */ }
+document.getElementById('refreshBtn').addEventListener('click', ()=>{ loadAll(); });
 async function loadAll(){ await loadGlobal(); await loadTeam(); await loadReports(); }
 
 // ======== User Picker =========
@@ -173,31 +173,29 @@ const pickerList = document.getElementById("userPickerList");
 document.getElementById("chooseUserBtn").addEventListener("click", async () => {
   pickerList.innerHTML = "Loading..."; overlay.style.display = 'block'; modal.style.display = 'block';
   try { const r = await fetch('/api/users'); const data = await r.json();
-    if (!data.ok) { pickerList.innerHTML = "Ошибка загрузки"; return; }
-    pickerList.innerHTML = '';
-    data.users.forEach(u => {
-      const item = document.createElement("div"); item.className = 'user-picker-item';
+    if(!data.ok){ pickerList.innerHTML="Ошибка загрузки"; return; }
+    pickerList.innerHTML='';
+    data.users.forEach(u=>{
+      const item = document.createElement("div"); item.className='user-picker-item';
       const uname = u.username || u.display_name || ('id:' + (u.id||'—'));
-      item.innerHTML = `<div><strong>${uname}</strong></div><div class="muted-small">joined ${u.joined_at ? new Date(u.joined_at).toLocaleDateString() : '—'}</div>`;
-      item.addEventListener("click", () => {
-        const val = uname.startsWith('@') ? uname : (uname.startsWith('id:') ? uname.replace('id:','') : uname);
-        document.getElementById("reportUser").value = val; overlay.style.display = 'none'; modal.style.display = 'none';
+      item.innerHTML = `<div><strong>${uname}</strong></div><div class="muted-small">joined ${u.joined_at?new Date(u.joined_at).toLocaleDateString():'—'}</div>`;
+      item.addEventListener("click", ()=> {
+        const val = uname.startsWith('@') ? uname : uname.replace('id:','');
+        document.getElementById("reportUser").value=val;
+        overlay.style.display='none'; modal.style.display='none';
       });
       pickerList.appendChild(item);
     });
-  } catch (err) { console.error('user picker error', err); pickerList.innerHTML = "Ошибка загрузки"; }
+  } catch(err){ console.error(err); pickerList.innerHTML="Ошибка загрузки"; }
 });
-document.getElementById("closePickerBtn").addEventListener("click", () => { overlay.style.display = 'none'; modal.style.display = 'none'; });
-overlay.addEventListener('click', ()=> { overlay.style.display = 'none'; modal.style.display = 'none'; });
-
-// ======== Send Report / Feedback / View User =========
-// ... твой существующий код ...
+document.getElementById("closePickerBtn").addEventListener("click", ()=>{ overlay.style.display='none'; modal.style.display='none'; });
+overlay.addEventListener('click', ()=>{ overlay.style.display='none'; modal.style.display='none'; });
 
 // ======== Daily Work Table =========
 const dailyTableBody = document.getElementById('dailyTableBody');
-function addDailyRow(username='', number='', type='happn') {
+function addDailyRow(username='', number='', type='happn'){
   const tr = document.createElement('tr');
-  tr.innerHTML = `
+  tr.innerHTML=`
     <td contenteditable="true">${username}</td>
     <td><input type="number" style="width:60px;" value="${number}"/></td>
     <td>
@@ -213,20 +211,18 @@ function addDailyRow(username='', number='', type='happn') {
     </td>
   `;
   tr.querySelector('button:first-child').addEventListener('click', ()=>{
-    const username = tr.children[0].innerText;
+    const username = tr.children[0].innerText.trim();
     const number = tr.querySelector('input').value;
     const type = tr.querySelector('select').value;
     console.log('Add to global stats:', {username, number, type});
-    tr.style.opacity = 0.5;
+    tr.style.opacity=0.5;
   });
   tr.querySelector('button:last-child').addEventListener('click', ()=>{ tr.remove(); });
   dailyTableBody.appendChild(tr);
 }
 document.getElementById('addDailyRowBtn').addEventListener('click', ()=>{ addDailyRow(); });
-// init with one row
-addDailyRow();
+addDailyRow(); // init
 
-// Load all
 loadAll();
 </script>
 </body>

@@ -17,242 +17,125 @@ const BOT_ADMIN_ID = process.env.BOT_ADMIN_ID || '';
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const PORT = process.env.PORT || 3000;
 
-if (!BOT_TOKEN || !WEBHOOK_URL) {
-  console.warn('WARNING: BOT_TOKEN or WEBHOOK_URL not set. Telegram integration disabled.');
-}
-
 db.init();
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '200kb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// === STATIC FRONTEND ===
 app.use('/', express.static(path.join(__dirname, 'public')));
 
-// === TEXT LOGGER FILE ===
 const LOG_FILE = path.join(process.cwd(), 'text_log.txt');
 
-// === TELEGRAM BOT WEBHOOK ===
 let bot = null;
-
 if (BOT_TOKEN && WEBHOOK_URL) {
   try {
     bot = new TelegramBot(BOT_TOKEN, { webHook: true });
-
     const webhookPath = '/tg';
     const fullWebhookUrl = WEBHOOK_URL.replace(/\/$/, '') + webhookPath;
-
     (async () => {
       await bot.setWebHook(fullWebhookUrl);
       console.log('Telegram webhook set →', fullWebhookUrl);
-    })().catch(err => {
-      console.error('Failed to set webhook:', err?.response?.body || err);
-    });
+    })().catch(console.error);
 
     app.post(webhookPath, (req, res) => {
       try {
         bot.processUpdate(req.body);
         res.sendStatus(200);
-      } catch (err) {
-        console.error('Bot processUpdate error', err);
-        res.sendStatus(500);
-      }
+      } catch (err) { console.error(err); res.sendStatus(500); }
     });
 
-    // === /start ===
+    // Стартовое сообщение
     bot.onText(/\/start/, async (msg) => {
-      try {
-        const chatId = msg.chat.id;
-        const username = msg.from.username || null;
-        const display = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
-        const user = await db.ensureUserByTelegram(String(chatId), username, display);
-        await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}! Ты зарегистрирован.`);
-      } catch (e) {
-        console.error('/start handler error', e);
-      }
+      const chatId = msg.chat.id;
+      const username = msg.from.username || null;
+      const display = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+      await db.ensureUserByTelegram(String(chatId), username, display);
+      await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}! Ты зарегистрирован.`);
     });
 
-    // ========================================================
-    // === TEXT LOGGER: Только в text_log.txt, НЕ в reports ===
-    // ========================================================
+    // Логирование текста + запись в базу
     bot.on('message', async (msg) => {
       if (!msg.text || msg.text.startsWith('/')) return;
 
-      // нормализуем имя
-      const username = msg.from.username
-        ? `@${msg.from.username}`
-        : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+      const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+      const chatId = msg.chat.id;
 
+      // Лог в text_log.txt
       const logEntry = `${username}: ${msg.text}\n`;
+      try { fs.appendFileSync(LOG_FILE, logEntry, 'utf8'); } catch(e){ console.error(e); }
 
+      // Сохранение как репорт
       try {
-        fs.appendFileSync(LOG_FILE, logEntry, 'utf8');
-      } catch (err) {
-        console.error('Ошибка записи text_log.txt:', err);
-      }
+        const user = await db.ensureUserByTelegram(String(chatId), msg.from.username, username);
+        await db.addReport({ user_id: user.id, text: msg.text, created_at: Date.now() });
 
-      // Телеграм не должен сохраняться в reports → просто отвечаем
-      try {
-        await bot.sendMessage(msg.chat.id, 'Ваше сообщение записано в text log.');
-      } catch (err) {
-        console.error('Ошибка ответа бота:', err);
+        if (BOT_ADMIN_ID) {
+          await bot.sendMessage(BOT_ADMIN_ID, `🚨 Новый репорт от ${username}:\n${msg.text}`);
+        }
+
+        await bot.sendMessage(chatId, 'Ваш репорт успешно добавлен в статистику!');
+      } catch(e){ 
+        console.error('Ошибка добавления репорта:', e);
+        await bot.sendMessage(chatId, 'Ошибка при добавлении репорта.'); 
       }
     });
 
-  } catch (err) {
-    console.error('Telegram init error', err);
-    bot = null;
-  }
+    // Команда /report для ручного добавления
+    bot.onText(/\/report (.+)/, async (msg, match) => {
+      const chatId = msg.chat.id;
+      const text = match[1];
+      const username = msg.from.username ? `@${msg.from.username}` : chatId;
+      try {
+        const user = await db.ensureUserByTelegram(String(chatId), msg.from.username, username);
+        await db.addReport({ user_id: user.id, text, created_at: Date.now() });
+
+        if (BOT_ADMIN_ID) await bot.sendMessage(BOT_ADMIN_ID, `🚨 Репорт от ${username}: ${text}`);
+        await bot.sendMessage(chatId, 'Репорт добавлен в статистику!');
+      } catch(e){
+        console.error(e);
+        await bot.sendMessage(chatId, 'Ошибка при добавлении репорта.');
+      }
+    });
+
+  } catch(err){ console.error('Telegram init error', err); bot = null; }
 }
 
-// =====================================================
-// ===================   API   ==========================
-// =====================================================
+// === API ===
+app.get('/api/health', (req,res)=>res.json({ ok:true }));
 
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, env: { webhook: !!WEBHOOK_URL, bot: !!BOT_TOKEN } });
+app.get('/api/users', async (req,res)=>{
+  try { const users = await db.listUsers(); res.json({ ok:true, users }); }
+  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
 });
 
-// Users
-app.get('/api/users', async (req, res) => {
-  try {
-    const users = await db.listUsers();
-    res.json({ ok: true, users });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
+app.get('/api/reports', async (req,res)=>{
+  try { const reports = await db.listReports(1000); res.json({ ok:true, reports }); }
+  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
 });
 
-// User info + reports
-app.get('/api/user/:username', async (req, res) => {
-  try {
-    const username = req.params.username;
-    const user = await db.getUserByUsername(username);
-    if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
-
-    const summary = await db.summaryForUser(user.id);
-    const reports = await db.listReportsForUser(user.id, 500);
-
-    res.json({
-      ok: true,
-      user,
-      summary: {
-        total: summary.total || 0,
-        total_length: summary.total_length || 0,
-        suspicious: summary.suspicious || 0
-      },
-      reports
-    });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Web report creation
-app.post('/api/reports', async (req, res) => {
-  try {
+app.post('/api/reports', async (req,res)=>{
+  try{
     const { username, text, reason } = req.body;
-    if (!username || !text || !reason)
-      return res.status(400).json({ ok: false, error: 'username, reason and text required' });
-
+    if(!username||!text||!reason) return res.status(400).json({ ok:false, error:'username, text, reason required' });
     let user = await db.getUserByUsername(username);
-    if (!user)
-      user = await db.ensureUserByTelegram(`web-${Date.now()}`, username, username);
-
-    const rep = await db.addReport({
-      user_id: user.id,
-      text,
-      created_at: Date.now()
-    });
-
-    if (bot && BOT_ADMIN_ID) {
-      const message = `🚨 Ручной Репорт\n\nЮзер: ${username}\nПричина: ${reason}\nТекст: ${text}`;
-      try {
-        await bot.sendMessage(BOT_ADMIN_ID, message);
-      } catch (err) {
-        console.error('Failed to notify admin via bot:', err?.response?.body || err);
-      }
-    }
-
-    res.json({ ok: true, report: rep });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
+    if(!user) user = await db.ensureUserByTelegram(`web-${Date.now()}`, username, username);
+    const rep = await db.addReport({ user_id:user.id, text:`[${reason}] ${text}`, created_at:Date.now() });
+    if(bot && BOT_ADMIN_ID) await bot.sendMessage(BOT_ADMIN_ID, `🚨 Ручной репорт от ${username}: ${text}`);
+    res.json({ ok:true, report:rep });
+  }catch(err){ res.status(500).json({ ok:false, error:err.message }); }
 });
 
-// Feedback
-app.post('/api/feedback', async (req, res) => {
-  try {
-    const { manager_username, to_username, message } = req.body;
-
-    if (!to_username || !message)
-      return res.status(400).json({ ok: false, error: 'to_username and message required' });
-
-    let manager = manager_username ? await db.getUserByUsername(manager_username) : null;
-    if (!manager && manager_username)
-      manager = await db.ensureUserByTelegram(`web-m-${Date.now()}`, manager_username, manager_username);
-
-    let user = await db.getUserByUsername(to_username);
-    if (!user)
-      user = await db.ensureUserByTelegram(`web-u-${Date.now()}`, to_username, to_username);
-
-    const f = await db.addFeedback({
-      user_id: user.id,
-      manager_id: manager ? manager.id : null,
-      message,
-      created_at: Date.now()
-    });
-
-    if (bot && user.telegram_id) {
-      try {
-        await bot.sendMessage(user.telegram_id, `Manager feedback: ${message}`);
-      } catch (err) {
-        console.error('Failed to send feedback to user via bot:', err?.response?.body || err);
-      }
-    }
-
-    res.json({ ok: true, feedback: f });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Global stats
-app.get('/api/stats/global', async (req, res) => {
-  try {
-    const s = await db.globalSummary();
-    res.json({ ok: true, summary: s });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Admin report list
-app.get('/api/reports', async (req, res) => {
-  try {
-    const reps = await db.listReports(1000);
-    res.json({ ok: true, reports: reps });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// Feedback list
-app.get('/api/feedback', async (req, res) => {
-  try {
-    const all = await db.listFeedback();
-    res.json({ ok: true, feedback: all });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
+// Глобальная статистика
+app.get('/api/stats/global', async (req,res)=>{
+  try{ const s = await db.globalSummary(); res.json({ ok:true, summary:s }); }
+  catch(err){ res.status(500).json({ ok:false, error:err.message }); }
 });
 
 // SPA fallback
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path.startsWith('/tg')) return next();
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('*', (req,res,next)=>{
+  if(req.path.startsWith('/api')||req.path.startsWith('/tg')) return next();
+  res.sendFile(path.join(__dirname,'public','index.html'));
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT,()=>console.log(`Server running on port ${PORT}`));
