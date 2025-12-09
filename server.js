@@ -55,26 +55,22 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}!`);
     });
 
-    // Catch all text messages (no commands)
     bot.on('message', async (msg) => {
       if (!msg.text || msg.text.startsWith('/')) return;
 
       const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
       const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
 
-      // Add pending report
       await db.addReport({
         user_id: user.id,
         text: msg.text,
         created_at: Date.now()
       });
 
-      // Notify admin
       if (BOT_ADMIN_ID) {
-        await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый репорт от ${username}: ${msg.text}`);
+        await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый отчет от ${username}: ${msg.text}`);
       }
 
-      // Confirm receipt
       await bot.sendMessage(msg.chat.id, 'Ваш отчет получен и ожидает одобрения.');
     });
   } catch (err) {
@@ -84,44 +80,66 @@ if (BOT_TOKEN && WEBHOOK_URL) {
 }
 
 // === API ===
-app.get('/api/stats/global', async (req, res) => {
-  try {
-    const summary = await db.globalSummary();
-    // build leaderboard
-    const users = await db.listUsers();
-    const reports = await db.listReports();
-    const leaderboardMap = {};
-    reports.filter(r => r.status==='approved').forEach(r => {
-      leaderboardMap[r.user_id] = (leaderboardMap[r.user_id]||0)+1;
-    });
-    const leaderboard = Object.keys(leaderboardMap).map(uid => ({ user_id: uid, count: leaderboardMap[uid] }));
-    leaderboard.sort((a,b)=>b.count-a.count);
 
-    res.json({ ok: true, summary: { ...summary, leaderboard } });
-  } catch (e) {
-    console.error(e);
-    res.json({ ok: false, error: e.message });
-  }
-});
-
-app.get('/api/users', async (req,res)=> {
-  try { const users = await db.listUsers(); res.json({ ok:true, users }); } 
-  catch(e){ res.json({ ok:false, error:e.message }); }
-});
-
+// Получение всех отчетов
 app.get('/api/reports', async (req,res)=> {
   try { const reports = await db.listReports(); res.json({ ok:true, reports }); } 
   catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
+// Одобрение отчета с числом и типом
 app.post('/api/reports/:id/approve', async (req,res)=>{
-  try { await db.updateReportStatus(req.params.id,'approved'); res.json({ ok:true }); } 
-  catch(e){ res.json({ ok:false, error:e.message }); }
+  try {
+    const { number, type } = req.body;
+    await db.updateReportStatus(req.params.id,'approved');
+    // Можно здесь сохранять number/type в отдельную таблицу или в notes
+    res.json({ ok:true });
+  } catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
+// Отклонение отчета
 app.post('/api/reports/:id/reject', async (req,res)=>{
   try { await db.updateReportStatus(req.params.id,'rejected'); res.json({ ok:true }); } 
   catch(e){ res.json({ ok:false, error:e.message }); }
+});
+
+// Список пользователей
+app.get('/api/users', async (req,res)=> {
+  try { const users = await db.listUsers(); res.json({ ok:true, users }); } 
+  catch(e){ res.json({ ok:false, error:e.message }); }
+});
+
+// Глобальная статистика по категориям и периодам
+app.get('/api/stats/global', async (req,res)=>{
+  try {
+    const period = req.query.period || 'today';
+    const reports = await db.listReports();
+
+    const now = Date.now();
+    let fromTime = 0;
+
+    switch(period){
+      case 'today':
+        const start = new Date(); start.setHours(0,0,0,0);
+        fromTime = start.getTime();
+        break;
+      case 'yesterday':
+        const y = new Date(); y.setHours(0,0,0,0); fromTime = y.getTime() - 86400000; break;
+      case 'week':
+        const w = new Date(); w.setHours(0,0,0,0); fromTime = w.getTime() - 7*86400000; break;
+      case 'month':
+        const m = new Date(); m.setHours(0,0,0,0); fromTime = m.getTime() - 30*86400000; break;
+    }
+
+    const filtered = reports.filter(r=>r.status==='approved' && r.created_at >= fromTime);
+
+    const data = { happn:0, instagram:0, lid:0 };
+    filtered.forEach(r=>{
+      if(r.number && r.type) data[r.type] += parseInt(r.number)||0;
+    });
+
+    res.json({ ok:true, data });
+  } catch(e){ res.json({ ok:false, error:e.message }); }
 });
 
 // SPA fallback

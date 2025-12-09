@@ -25,6 +25,8 @@ export function init() {
         suspicious INTEGER,
         created_at INTEGER,
         status TEXT DEFAULT 'pending',
+        number INTEGER DEFAULT 0,
+        type TEXT DEFAULT '',
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -187,11 +189,12 @@ export function globalSummary() {
   });
 }
 
-export function updateReportStatus(id, status) {
+// === Обновление статуса отчета с возможностью задать number и type ===
+export function updateReportStatus(id, status, number = 0, type = '') {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE reports SET status = ? WHERE id = ?`,
-      [status, id],
+      `UPDATE reports SET status = ?, number = ?, type = ? WHERE id = ?`,
+      [status, number, type, id],
       function (err) {
         if (err) return reject(err);
         resolve(true);

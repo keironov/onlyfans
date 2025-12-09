@@ -20,11 +20,6 @@ input,textarea,select{width:100%;padding:8px;border-radius:6px;border:1px solid 
 button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
 .small{font-size:13px;color:var(--muted);}
 h1,h3{margin:0 0 8px 0;}
-#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
-#userPickerModal{display:none;position:fixed;top:20%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:320px;max-height:60%;overflow-y:auto;z-index:2000;}
-.user-picker-item{padding:8px;cursor:pointer;border-radius:6px;}
-.user-picker-item:hover{background:rgba(255,255,255,0.02);}
-.muted-small{color:var(--muted);font-size:12px;}
 table{width:100%;border-collapse:collapse;color:#e6eef8;}
 th,td{padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);text-align:left;}
 td input,td select{width:auto;}
@@ -44,17 +39,26 @@ td input,td select{width:auto;}
 
   <div class="grid">
     <div>
+      <!-- Global Stats -->
       <div class="card">
         <h3>Global Stats</h3>
-        <div id="globalSummary" class="small muted">Loading...</div>
-        <canvas id="leaderboardChart" style="height:220px;"></canvas>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <select id="globalPeriod">
+            <option value="today">Сегодня</option>
+            <option value="yesterday">Вчера</option>
+            <option value="week">Неделя</option>
+            <option value="month">Месяц</option>
+          </select>
+        </div>
+        <canvas id="globalChart" style="height:220px;"></canvas>
       </div>
 
+      <!-- Отчёты -->
       <div class="card">
-        <h3>Pending Reports</h3>
+        <h3>Отчёты</h3>
         <table>
           <thead>
-            <tr><th>@user</th><th>Text</th><th>Type</th><th>✔ / ❌</th></tr>
+            <tr><th>@user</th><th>Text</th><th>Number</th><th>Type</th><th>✔ / ❌</th></tr>
           </thead>
           <tbody id="dailyTableBody"></tbody>
         </table>
@@ -81,40 +85,45 @@ td input,td select{width:auto;}
   </div>
 </div>
 
-<div id="userPickerOverlay"></div>
-<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
-  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
-  <div id="userPickerList" class="small muted">Loading...</div>
-  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
-    <button id="closePickerBtn" type="button">Закрыть</button>
-  </div>
-</div>
-
 <script>
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 
 const dailyTableBody = document.getElementById('dailyTableBody');
 
-// ==== Load Pending Reports ====
+// ===== Load Reports =====
 async function loadReportsTable() {
   dailyTableBody.innerHTML = '';
   try {
     const r = await fetchJson('/api/reports');
-    if(!r.ok) { dailyTableBody.innerHTML='<tr><td colspan="4">Ошибка загрузки</td></tr>'; return; }
+    if(!r.ok){ dailyTableBody.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
     r.reports.filter(rep=>rep.status==='pending').forEach(rep=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${rep.username||'—'}</td>
         <td>${rep.text}</td>
-        <td>${rep.task_type||'—'}</td>
+        <td><input type="number" value="0" style="width:60px"></td>
+        <td>
+          <select>
+            <option value="happn">happn</option>
+            <option value="instagram">instagram</option>
+            <option value="lid">lid</option>
+          </select>
+        </td>
         <td>
           <button style="background:#10b981;color:#081125;border:none;padding:2px 6px;margin-right:4px;cursor:pointer">✔</button>
           <button style="background:#ef4444;color:#fff;border:none;padding:2px 6px;cursor:pointer">❌</button>
         </td>
       `;
       tr.querySelector('button:first-child').addEventListener('click', async ()=>{
-        await fetch(`/api/reports/${rep.id}/approve`,{method:'POST'});
-        tr.remove(); loadGlobal(); loadLeaderboard();
+        const number = tr.querySelector('input').value;
+        const type = tr.querySelector('select').value;
+        await fetch(`/api/reports/${rep.id}/approve`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({number,type})
+        });
+        tr.remove();
+        loadGlobalChart();
       });
       tr.querySelector('button:last-child').addEventListener('click', async ()=>{
         await fetch(`/api/reports/${rep.id}/reject`,{method:'POST'});
@@ -125,38 +134,44 @@ async function loadReportsTable() {
   } catch(e){ console.error(e); }
 }
 
-// ==== Global Stats / Leaderboard ====
-const globalSummaryEl = document.getElementById('globalSummary');
-const leaderboardCtx = document.getElementById('leaderboardChart').getContext('2d');
-let leaderboardChart = null;
+// ===== Global Stats Chart =====
+const globalCtx = document.getElementById('globalChart').getContext('2d');
+let globalChart = null;
+const periodSelect = document.getElementById('globalPeriod');
 
-async function loadGlobal(){
-  try{
-    const g = await fetchJson('/api/stats/global');
-    if(!g.ok){ globalSummaryEl.innerText='Failed'; return; }
-    const s = g.summary;
-    globalSummaryEl.innerText = `Reports: ${s.reports_total||0} · Suspicious: ${s.suspicious_total||0}`;
-    const labels = (s.leaderboard||[]).slice(0,7).map(x=>x.user_id);
-    const data = (s.leaderboard||[]).slice(0,7).map(x=>x.count);
-    if(leaderboardChart) leaderboardChart.destroy();
-    leaderboardChart = new Chart(leaderboardCtx,{
-      type:'bar',
-      data:{labels,datasets:[{label:'Reports',data}]},
-      options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+async function loadGlobalChart() {
+  try {
+    const period = periodSelect.value;
+    const g = await fetchJson('/api/stats/global?period='+period);
+    if(!g.ok) return;
+    const data = g.data;
+    const labels = ['happn','instagram','lid'];
+    const values = [data.happn||0, data.instagram||0, data.lid||0];
+
+    if(globalChart) globalChart.destroy();
+    globalChart = new Chart(globalCtx,{
+      type:'doughnut',
+      data:{
+        labels,
+        datasets:[{data:values, backgroundColor:['#f59e0b','#3b82f6','#10b981'] }]
+      },
+      options:{
+        plugins:{legend:{position:'bottom'}}
+      }
     });
-  }catch(e){ console.error(e); globalSummaryEl.innerText='Failed'; }
+  } catch(e){ console.error(e); }
 }
 
-function loadLeaderboard(){ loadGlobal(); }
+periodSelect.addEventListener('change', ()=>{ loadGlobalChart(); });
 
 document.getElementById('refreshBtn').addEventListener('click', ()=>{
   loadReportsTable();
-  loadGlobal();
+  loadGlobalChart();
 });
 
 // Initial load
 loadReportsTable();
-loadGlobal();
+loadGlobalChart();
 </script>
 </body>
 </html>
