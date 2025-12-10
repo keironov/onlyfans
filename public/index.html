@@ -26,44 +26,27 @@ html,body{height:100%;margin:0;padding:0;background:linear-gradient(180deg,var(-
 .muted{color:var(--muted);font-size:13px;}
 .small{font-size:13px;color:var(--muted);}
 h1,h3{margin:0 0 8px 0;}
-/* Inputs & selects */
 input,textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.05);background:var(--input-bg);color:inherit;box-sizing:border-box;outline:none;transition:box-shadow .18s, border-color .18s;}
 input:focus, textarea:focus, select:focus{box-shadow:0 0 8px rgba(245,158,11,0.14);border-color:rgba(245,158,11,0.28);}
-
-/* Number input */
 input[type="number"]{width:80px;padding:6px 8px;border-radius:8px;text-align:center;}
-
-/* Buttons */
 button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;}
 button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 10px;}
 .action-btn{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;border:none;}
 .approve{background:var(--accent-green);color:#081125;}
 .reject{background:var(--accent-red);color:#fff;}
-
-/* Picker modal */
 #userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
 #userPickerModal{display:none;position:fixed;top:18%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:360px;max-height:65%;overflow-y:auto;z-index:2000;}
 .user-picker-item{padding:10px;cursor:pointer;border-radius:8px;}
 .user-picker-item:hover{background:rgba(255,255,255,0.02);}
-
-/* Table */
 table{width:100%;border-collapse:collapse;color:#e6eef8;}
 th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:left;vertical-align:middle;}
 thead th{color:var(--muted);font-weight:600;font-size:13px;}
 .pending-row{background:transparent;}
 .pending-row:hover{background:rgba(255,255,255,0.01);}
-
-/* Selects inside row */
 .table-select {width:140px;padding:6px;border-radius:8px;background:var(--input-bg);}
-
-/* Chart container small tweaks */
 canvas{max-width:100%;}
-
-/* Responsive */
-@media (max-width:980px){
-  .grid{grid-template-columns:1fr;}
-  .wrap{padding:12px;}
-}
+@media (max-width:980px){ .grid{grid-template-columns:1fr;} .wrap{padding:12px;} }
+.feedback-card .small{margin-top:6px;}
 </style>
 </head>
 <body>
@@ -114,7 +97,7 @@ canvas{max-width:100%;}
         <div id="teamList" class="team-list small muted">Loading...</div>
       </div>
 
-      <div class="card">
+      <div class="card feedback-card">
         <h3>User Summary</h3>
         <div style="display:grid;gap:8px">
           <input id="viewUsername" placeholder="username to view (e.g. @ivan)" />
@@ -126,6 +109,21 @@ canvas{max-width:100%;}
           <canvas id="userActivityChart" style="height:180px;margin-top:8px;"></canvas>
         </div>
       </div>
+
+      <div class="card">
+        <h3>Отправить фидбек пользователю</h3>
+        <div style="display:grid;gap:8px">
+          <select id="feedbackUserSelect">
+            <option value="">Выбери пользователя…</option>
+          </select>
+          <textarea id="feedbackText" rows="3" placeholder="Текст фидбэка"></textarea>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="sendFeedbackBtn">Отправить</button>
+            <div id="feedbackStatus" class="small muted"></div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -162,11 +160,9 @@ function preserveStateStart(){
   };
 }
 function preserveStateEnd(state){
-  // restore scroll
   window.scrollTo({ top: state.scrollY, behavior: 'auto' });
-  // try to keep focus if it was inside table and still exists
   if(state.activeElement && document.body.contains(state.activeElement)) {
-    try { state.activeElement.focus({ preventScroll: true }); } catch(e) { /*ignore*/ }
+    try { state.activeElement.focus({ preventScroll: true }); } catch(e) {}
   }
 }
 
@@ -175,16 +171,14 @@ async function loadReports(){
   const state = preserveStateStart();
   try{
     const res = await fetchJson('/api/reports');
-    if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; return; }
+    if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; preserveStateEnd(state); return; }
     const pendingReports = res.reports.filter(r=>r.status==='pending');
 
-    // map of current DOM rows
     const existingMap = {};
     reportsTable.querySelectorAll('tr[data-report-id]').forEach(tr=>{
       existingMap[tr.dataset.reportId] = tr;
     });
 
-    // add or update rows
     pendingReports.forEach(rep=>{
       const id = String(rep.id);
       let tr = existingMap[id];
@@ -193,7 +187,7 @@ async function loadReports(){
         tr.className = 'pending-row';
         tr.dataset.reportId = id;
         tr.innerHTML = `
-          <td class="table-username">${rep.username||'—'}</td>
+          <td class="table-username">${escapeHtml(rep.username||'—')}</td>
           <td class="report-text" style="white-space:normal;word-break:break-word">${escapeHtml(rep.text)}</td>
           <td><input type="number" value="0" style="width:72px" /></td>
           <td>
@@ -208,10 +202,8 @@ async function loadReports(){
             <button class="action-btn reject" style="margin-left:6px">✖</button>
           </td>
         `;
-        // append at the end (won't move scroll if inside scrolled container)
         reportsTable.appendChild(tr);
 
-        // attach handlers
         const numInput = tr.querySelector('input');
         const sel = tr.querySelector('select');
         tr.querySelector('.approve').addEventListener('click', async ()=>{
@@ -223,7 +215,6 @@ async function loadReports(){
               headers:{'Content-Type':'application/json'},
               body: JSON.stringify({ number:num, type })
             });
-            // remove row and refresh charts
             tr.remove();
             await loadGlobalChart();
           } catch(e){ console.error(e); }
@@ -235,20 +226,17 @@ async function loadReports(){
           } catch(e){ console.error(e); }
         });
       } else {
-        // if the user is editing inside this row, do NOT overwrite that input/select
         const activeRow = state.activeRowId === id;
         if(!activeRow){
           const numInput = tr.querySelector('input');
           const sel = tr.querySelector('select');
-          if(numInput) numInput.value = numInput.value || '0'; // keep current or default
+          if(numInput) numInput.value = numInput.value || '0';
           if(sel) sel.value = sel.value || 'happn';
         }
       }
-      // mark as processed
       delete existingMap[id];
     });
 
-    // any remaining rows in existingMap are stale -> remove them
     Object.keys(existingMap).forEach(oldId=>{
       const tr = existingMap[oldId];
       if(tr) tr.remove();
@@ -263,7 +251,6 @@ async function loadTeam(){
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
-    // keep scrollTop of teamList
     const st = teamListEl.scrollTop;
     teamListEl.innerHTML = '';
     res.users.forEach(u=>{
@@ -282,7 +269,24 @@ async function loadTeam(){
       teamListEl.appendChild(div);
     });
     teamListEl.scrollTop = st;
+    // also fill feedback user select
+    fillFeedbackUsers(res.users);
   }catch(e){ console.error(e); teamListEl.innerText='Ошибка'; }
+}
+
+/* ========= Fill feedback users ========= */
+function fillFeedbackUsers(users){
+  const sel = document.getElementById('feedbackUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.telegram_id || '';
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
 }
 
 /* ========= Global chart (doughnut) ========= */
@@ -312,7 +316,7 @@ async function loadGlobalChart(){
           }]
         },
         options:{
-          plugins:{legend:{position:'bottom',labels:{boxWidth:12}}}, 
+          plugins:{legend:{position:'bottom',labels:{boxWidth:12}}},
           cutout: '60%',
           animation:{duration:500}
         }
@@ -371,10 +375,38 @@ function escapeHtml(text){
   return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
-/* ========= Auto-refresh control ========= */
+/* ========= Feedback block ========= */
+document.getElementById('sendFeedbackBtn').addEventListener('click', async () => {
+  const userId = document.getElementById('feedbackUserSelect').value;
+  const text = document.getElementById('feedbackText').value.trim();
+  const status = document.getElementById('feedbackStatus');
+
+  if (!userId) { status.textContent = "Выбери пользователя!"; return; }
+  if (!text) { status.textContent = "Напиши текст фидбэка!"; return; }
+  status.textContent = "Отправка…";
+
+  try {
+    const res = await fetch('/api/feedback/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram_id: userId, text })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = "Фидбек отправлен!";
+      document.getElementById('feedbackText').value = "";
+    } else {
+      status.textContent = "Ошибка: " + data.error;
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = "Ошибка соединения";
+  }
+});
+
+/* ========= Auto-refresh ========= */
 let periodicHandle = null;
 async function refreshAll(){
-  // keep top-level scroll position
   const state = preserveStateStart();
   await Promise.all([ loadReports(), loadTeam(), loadGlobalChart() ]);
   preserveStateEnd(state);
@@ -382,18 +414,12 @@ async function refreshAll(){
 document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 document.getElementById('periodSelect').addEventListener('change', () => { loadGlobalChart(); });
 
-// initial + periodic
 (async function init(){
   await refreshAll();
   if(periodicHandle) clearInterval(periodicHandle);
-  periodicHandle = setInterval(async ()=>{
-    // do not trigger if page hidden (to avoid interfering)
-    if(document.hidden) return;
-    await refreshAll();
-  }, 3000);
+  periodicHandle = setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
 })();
 
-/* ========= Optional: clean unload ========= */
 window.addEventListener('beforeunload', ()=>{ if(periodicHandle) clearInterval(periodicHandle); });
 </script>
 </body>
