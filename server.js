@@ -96,9 +96,10 @@ if (BOT_TOKEN && WEBHOOK_URL) {
   console.warn('BOT_TOKEN or WEBHOOK_URL not set — telegram disabled.');
 }
 
-// === API ===
+// === API ENDPOINTS ===
 
-// Получение всех пользователей
+// --- USERS ---
+
 app.get('/api/users', async (req, res) => {
   try {
     const users = await db.listUsers();
@@ -108,42 +109,50 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Добавление нового пользователя
 app.post('/api/users/add', async (req, res) => {
   try {
-    const { username, display_name } = req.body;
-    if (!username) return res.status(400).json({ ok: false, error: 'username missing' });
-    const user = await db.addUser({ username, display_name });
+    const { username } = req.body;
+    if (!username) return res.json({ ok: false, error: 'Username required' });
+    const user = await db.addUserByUsername(username);
     res.json({ ok: true, user });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// Удаление пользователя
-app.post('/api/users/:id/delete', async (req, res) => {
-  try {
-    const id = req.params.id;
-    await db.deleteUser(id);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// Назначение роли пользователю
 app.post('/api/users/:id/role', async (req, res) => {
   try {
-    const id = req.params.id;
     const { role } = req.body;
-    await db.setUserRole(id, role);
+    const user = await db.updateUserRole(req.params.id, role);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    await db.deleteUser(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-// Получение всех отчетов
+app.get('/api/users/:username/summary', async (req, res) => {
+  try {
+    const user = await db.getUserByUsername(req.params.username);
+    if (!user) return res.json({ ok: false, error: 'User not found' });
+    const summary = await db.summaryForUser(user.id);
+    const reports = await db.listReportsForUser(user.id);
+    res.json({ ok: true, user, summary, reports });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- REPORTS ---
+
 app.get('/api/reports', async (req, res) => {
   try {
     const reports = await db.listReports();
@@ -153,7 +162,6 @@ app.get('/api/reports', async (req, res) => {
   }
 });
 
-// Одобрение отчета с числом и типом
 app.post('/api/reports/:id/approve', async (req, res) => {
   try {
     const { number = 0, type = '' } = req.body;
@@ -164,7 +172,6 @@ app.post('/api/reports/:id/approve', async (req, res) => {
   }
 });
 
-// Отклонение отчета
 app.post('/api/reports/:id/reject', async (req, res) => {
   try {
     await db.updateReportStatus(req.params.id, 'rejected');
@@ -174,7 +181,8 @@ app.post('/api/reports/:id/reject', async (req, res) => {
   }
 });
 
-// Глобальная статистика
+// --- STATISTICS ---
+
 app.get('/api/stats/global', async (req, res) => {
   try {
     const period = req.query.period || 'today';
@@ -207,7 +215,17 @@ app.get('/api/stats/global', async (req, res) => {
   }
 });
 
-// SEND FEEDBACK
+app.get('/api/stats/detailed', async (req, res) => {
+  try {
+    const stats = await db.getDetailedStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- FEEDBACK ---
+
 app.post('/api/feedback/send', async (req, res) => {
   try {
     const { telegram_id, text } = req.body;
@@ -225,15 +243,100 @@ app.post('/api/feedback/send', async (req, res) => {
   }
 });
 
-// User summary per username
-app.get('/api/users/:username/summary', async (req, res) => {
+// --- WORK LOGS (BLOG) ---
+
+app.get('/api/worklogs', async (req, res) => {
   try {
-    const user = await db.getUserByUsername(req.params.username);
-    if (!user) return res.json({ ok: false, error: 'User not found' });
-    const summary = await db.summaryForUser(user.id);
-    const reports = await db.listReportsForUser(user.id);
-    res.json({ ok: true, user, summary, reports });
+    const logs = await db.listWorkLogs();
+    res.json({ ok: true, logs });
   } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/worklogs/add', async (req, res) => {
+  try {
+    const { user_id, date, status, reason } = req.body;
+    if (!user_id || !date || !status) {
+      return res.json({ ok: false, error: 'Missing required fields' });
+    }
+    const log = await db.addWorkLog({ user_id, date, status, reason: reason || '' });
+    res.json({ ok: true, log });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- INSIGHTS ---
+
+app.get('/api/insights', async (req, res) => {
+  try {
+    const insights = await db.listInsights();
+    res.json({ ok: true, insights });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/insights/generate', async (req, res) => {
+  try {
+    const stats = await db.getDetailedStats();
+    const insights = [];
+
+    // Analyze each user's performance
+    stats.forEach(user => {
+      const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
+      const happnRatio = totalConverted > 0 ? (user.happn_total || 0) / totalConverted : 0;
+      const instagramRatio = totalConverted > 0 ? (user.instagram_total || 0) / totalConverted : 0;
+
+      // Recommendation logic
+      if (happnRatio > 0.7 && totalConverted > 20) {
+        insights.push({
+          content: `${user.username}: Отлично работает с Happn (${Math.round(happnRatio * 100)}%). Рекомендуется увеличить количество аккаунтов Happn.`,
+          category: 'performance'
+        });
+      }
+
+      if (instagramRatio > 0.6 && totalConverted > 15) {
+        insights.push({
+          content: `${user.username}: Высокая конверсия через Instagram (${Math.round(instagramRatio * 100)}%). Стоит сфокусироваться на Instagram-аккаунтах.`,
+          category: 'performance'
+        });
+      }
+
+      if (totalConverted < 5 && user.approved_reports > 5) {
+        insights.push({
+          content: `${user.username}: Много отчетов (${user.approved_reports}), но мало конверсий (${totalConverted}). Возможно, нужна помощь с техникой перевода.`,
+          category: 'improvement'
+        });
+      }
+
+      if (totalConverted > 50) {
+        insights.push({
+          content: `${user.username}: Топ-перформер! ${totalConverted} конверсий. Можно делегировать больше аккаунтов.`,
+          category: 'success'
+        });
+      }
+    });
+
+    // Global insights
+    const totalUsers = stats.length;
+    const activeUsers = stats.filter(u => u.approved_reports > 0).length;
+    if (activeUsers < totalUsers * 0.5) {
+      insights.push({
+        content: `Только ${activeUsers} из ${totalUsers} активны. Рекомендуется провести встречу с неактивными членами команды.`,
+        category: 'team'
+      });
+    }
+
+    // Save insights to database
+    for (const insight of insights) {
+      await db.addInsight(insight);
+    }
+
+    res.json({ ok: true, insights });
+  } catch (e) {
+    console.error('insights generation error', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
