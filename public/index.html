@@ -7,8 +7,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
-  --bg:#0b1220; --card:#111827; --muted:#9ca3af; --accent:#f59e0b;
-  --accent-dark:#d48806; --input-bg:#0f1724; --accent-green:#10b981;
+  --bg:#0b1220;
+  --card:#111827;
+  --muted:#9ca3af;
+  --accent:#f59e0b;
+  --accent-dark:#d48806;
+  --input-bg:#0f1724;
+  --accent-green:#10b981;
   --accent-red:#ef4444;
 }
 html,body{height:100%;margin:0;padding:0;background:linear-gradient(180deg,var(--bg),#0f1724);color:#e6eef8;font-family:Inter,Arial,Helvetica,sans-serif;}
@@ -89,11 +94,6 @@ canvas{max-width:100%;}
     <div>
       <div class="card">
         <h3>Team</h3>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-          <input id="newUsername" placeholder="@username" />
-          <input id="newDisplay" placeholder="Display Name" />
-          <button id="addUserBtn">Add</button>
-        </div>
         <div id="teamList" class="team-list small muted">Loading...</div>
       </div>
 
@@ -106,7 +106,7 @@ canvas{max-width:100%;}
             <button id="clearUserBtn" class="secondary">Clear</button>
           </div>
           <div id="userSummary" class="small muted">No user selected</div>
-          <canvas id="userActivityChart" style="height:180px;margin-top:8px"></canvas>
+          <canvas id="userActivityChart" style="height:180px;margin-top:8px;"></canvas>
         </div>
       </div>
 
@@ -128,30 +128,35 @@ canvas{max-width:100%;}
   </div>
 </div>
 
+<div id="userPickerOverlay"></div>
+<div id="userPickerModal" role="dialog" aria-modal="true" aria-labelledby="userPickerTitle">
+  <div id="userPickerTitle" style="font-weight:bold; margin-bottom:8px;">Выбери пользователя</div>
+  <div id="userPickerList" class="small muted">Loading...</div>
+  <div style="display:flex; gap:8px; margin-top:8px; justify-content:flex-end;">
+    <button id="closePickerBtn" type="button">Закрыть</button>
+  </div>
+</div>
+
 <script>
-/* ====== Helpers ====== */
-async function fetchJson(url, opts) { 
-  const res = await fetch(url, opts); 
-  return res.json(); 
-}
-
-function escapeHtml(text){ 
-  if(!text && text!==0) return ''; 
-  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); 
-}
-
-/* ====== Elements ====== */
+/* ========= Helpers ========= */
+async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 const reportsTable = document.getElementById('reportsTable');
 const teamListEl = document.getElementById('teamList');
 const globalSummaryEl = document.getElementById('globalSummary');
 const globalChartCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
 
-/* ====== Preserve scroll/input ====== */
+/* Preserve scroll and focused input when updating */
 function preserveStateStart(){
   return {
     scrollY: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
-    activeElement: document.activeElement
+    activeElement: document.activeElement,
+    activeRowId: (() => {
+      const ae = document.activeElement;
+      if(!ae) return null;
+      const tr = ae.closest && ae.closest('tr');
+      return tr ? tr.dataset.reportId : null;
+    })()
   };
 }
 function preserveStateEnd(state){
@@ -161,79 +166,7 @@ function preserveStateEnd(state){
   }
 }
 
-/* ====== Load Team ====== */
-async function loadTeam(){
-  try{
-    const res = await fetchJson('/api/users');
-    if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
-    teamListEl.innerHTML = '';
-    res.users.forEach(u=>{
-      const div = document.createElement('div');
-      div.className='user-row';
-      div.dataset.userid = u.id;
-      const uname = u.username || ('id:'+u.id);
-      div.innerHTML = `
-        <span style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</span>
-        <select class="table-select">
-          <option value="">Выбрать роль</option>
-          <option value="worker" ${u.role==='worker'?'selected':''}>Работник</option>
-          <option value="cleaner" ${u.role==='cleaner'?'selected':''}>Уборщик</option>
-          <option value="accountant" ${u.role==='accountant'?'selected':''}>Бухгалтер</option>
-        </select>
-        <button class="secondary deleteUserBtn">Удалить</button>
-      `;
-      div.querySelector('select').addEventListener('change', async ()=>{
-        try{ 
-          await fetch(`/api/users/${u.id}/role`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({role:div.querySelector('select').value})
-          }); 
-        } catch(e){console.error(e);}
-      });
-      div.querySelector('.deleteUserBtn').addEventListener('click', async ()=>{
-        if(!confirm(`Удалить пользователя ${uname}?`)) return;
-        try{ await fetch(`/api/users/${u.id}/delete`,{method:'POST'}); loadTeam(); }catch(e){console.error(e);}
-      });
-      teamListEl.appendChild(div);
-    });
-    fillFeedbackUsers(res.users);
-  }catch(e){ console.error(e); teamListEl.innerText='Ошибка'; }
-}
-
-/* ====== Add User ====== */
-document.getElementById('addUserBtn').addEventListener('click', async ()=>{
-  const username = document.getElementById('newUsername').value.trim();
-  const display_name = document.getElementById('newDisplay').value.trim();
-  if(!username){ alert('Введите username'); return; }
-  try{
-    await fetch('/api/users/add',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({username, display_name})
-    });
-    document.getElementById('newUsername').value='';
-    document.getElementById('newDisplay').value='';
-    loadTeam();
-  }catch(e){ console.error(e); alert('Ошибка добавления'); }
-});
-
-/* ====== Fill Feedback Users ====== */
-function fillFeedbackUsers(users){
-  const sel = document.getElementById('feedbackUserSelect');
-  if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
-  users.forEach(u=>{
-    const option = document.createElement('option');
-    option.value = u.telegram_id || '';
-    option.textContent = u.username || ('id:'+u.id);
-    sel.appendChild(option);
-  });
-  if(cur) sel.value = cur;
-}
-
-/* ====== Load Reports ====== */
+/* ========= Pending reports ========= */
 async function loadReports(){
   const state = preserveStateStart();
   try{
@@ -242,18 +175,20 @@ async function loadReports(){
     const pendingReports = res.reports.filter(r=>r.status==='pending');
 
     const existingMap = {};
-    reportsTable.querySelectorAll('tr[data-report-id]').forEach(tr=>{ existingMap[tr.dataset.reportId] = tr; });
+    reportsTable.querySelectorAll('tr[data-report-id]').forEach(tr=>{
+      existingMap[tr.dataset.reportId] = tr;
+    });
 
     pendingReports.forEach(rep=>{
       const id = String(rep.id);
       let tr = existingMap[id];
       if(!tr){
         tr = document.createElement('tr');
-        tr.className='pending-row';
+        tr.className = 'pending-row';
         tr.dataset.reportId = id;
         tr.innerHTML = `
           <td class="table-username">${escapeHtml(rep.username||'—')}</td>
-          <td class="report-text">${escapeHtml(rep.text)}</td>
+          <td class="report-text" style="white-space:normal;word-break:break-word">${escapeHtml(rep.text)}</td>
           <td><input type="number" value="0" style="width:72px" /></td>
           <td>
             <select class="table-select">
@@ -274,25 +209,86 @@ async function loadReports(){
         tr.querySelector('.approve').addEventListener('click', async ()=>{
           const num = parseInt(numInput.value)||0;
           const type = sel.value;
-          try { await fetch(`/api/reports/${id}/approve`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({ number:num, type })
-          }); tr.remove(); await loadGlobalChart(); } catch(e){ console.error(e); }
+          try {
+            await fetch(`/api/reports/${id}/approve`,{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ number:num, type })
+            });
+            tr.remove();
+            await loadGlobalChart();
+          } catch(e){ console.error(e); }
         });
         tr.querySelector('.reject').addEventListener('click', async ()=>{
-          try { await fetch(`/api/reports/${id}/reject`,{ method:'POST' }); tr.remove(); } catch(e){ console.error(e); }
+          try {
+            await fetch(`/api/reports/${id}/reject`,{ method:'POST' });
+            tr.remove();
+          } catch(e){ console.error(e); }
         });
+      } else {
+        const activeRow = state.activeRowId === id;
+        if(!activeRow){
+          const numInput = tr.querySelector('input');
+          const sel = tr.querySelector('select');
+          if(numInput) numInput.value = numInput.value || '0';
+          if(sel) sel.value = sel.value || 'happn';
+        }
       }
       delete existingMap[id];
     });
 
-    Object.keys(existingMap).forEach(oldId=>{ const tr = existingMap[oldId]; if(tr) tr.remove(); });
+    Object.keys(existingMap).forEach(oldId=>{
+      const tr = existingMap[oldId];
+      if(tr) tr.remove();
+    });
+
   }catch(e){ console.error('loadReports err', e); }
   preserveStateEnd(state);
 }
 
-/* ====== Global Chart ====== */
+/* ========= Team list ========= */
+async function loadTeam(){
+  try{
+    const res = await fetchJson('/api/users');
+    if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
+    const st = teamListEl.scrollTop;
+    teamListEl.innerHTML = '';
+    res.users.forEach(u=>{
+      const div = document.createElement('div');
+      div.className='user-row';
+      const uname = u.username || ('id:'+u.id);
+      div.innerHTML = `
+        <span style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</span>
+        <select class="table-select">
+          <option value="">Выбрать роль</option>
+          <option value="worker">Работник</option>
+          <option value="cleaner">Уборщик</option>
+          <option value="accountant">Бухгалтер</option>
+        </select>
+      `;
+      teamListEl.appendChild(div);
+    });
+    teamListEl.scrollTop = st;
+    fillFeedbackUsers(res.users);
+  }catch(e){ console.error(e); teamListEl.innerText='Ошибка'; }
+}
+
+/* ========= Fill feedback users ========= */
+function fillFeedbackUsers(users){
+  const sel = document.getElementById('feedbackUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.telegram_id || '';
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+/* ========= Global chart (doughnut) ========= */
 async function loadGlobalChart(){
   try{
     const period = document.getElementById('periodSelect').value;
@@ -301,6 +297,7 @@ async function loadGlobalChart(){
     const data = res.data || {happn:0,instagram:0,lid:0};
     const total = (data.happn||0)+(data.instagram||0)+(data.lid||0);
     globalSummaryEl.innerText = `Всего: ${total} · Happn: ${data.happn||0} · Instagram: ${data.instagram||0} · Лид: ${data.lid||0}`;
+
     const dataset = [data.happn||0, data.instagram||0, data.lid||0];
 
     if(globalChart){
@@ -309,33 +306,44 @@ async function loadGlobalChart(){
     } else {
       globalChart = new Chart(globalChartCtx,{
         type:'doughnut',
-        data:{ labels:['Happn','Instagram','Лид'], datasets:[{ data: dataset, backgroundColor:['#f59e0b','#10b981','#3b82f6'], borderWidth:0 }] },
-        options:{plugins:{legend:{position:'bottom',labels:{boxWidth:12}}}, cutout: '60%', animation:{duration:500}}
+        data:{
+          labels:['Happn','Instagram','Лид'],
+          datasets:[{
+            data: dataset,
+            backgroundColor:['#f59e0b','#10b981','#3b82f6'],
+            borderWidth:0
+          }]
+        },
+        options:{
+          plugins:{legend:{position:'bottom',labels:{boxWidth:12}}},
+          cutout: '60%',
+          animation:{duration:500}
+        }
       });
     }
   }catch(e){ console.error('loadGlobalChart err', e); globalSummaryEl.innerText='Ошибка'; }
 }
 
-/* ====== User Summary ====== */
+/* ========= User summary (per person) ========= */
 document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
   const username = document.getElementById('viewUsername').value.trim();
   if(!username) return;
   try{
     const usersRes = await fetchJson('/api/users');
     if(!usersRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const user = usersRes.users.find(u=>u.username===username);
+    const user = usersRes.users.find(u => u.username === username);
     if(!user){ document.getElementById('userSummary').innerText='Не найден'; return; }
 
     const reportsRes = await fetchJson('/api/reports');
     if(!reportsRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const userReports = reportsRes.reports.filter(r=>r.user_id===user.id && r.status==='approved');
+    const userReports = reportsRes.reports.filter(r => r.user_id === user.id && r.status === 'approved');
 
-    const total = userReports.reduce((acc,r)=>acc+(parseInt(r.number)||0),0);
+    const total = userReports.reduce((acc, r) => acc + (parseInt(r.number)||0), 0);
     const byType = {happn:0, instagram:0, lid:0};
-    userReports.forEach(r=>{ if(r.type) byType[r.type]+=parseInt(r.number)||0; });
+    userReports.forEach(r => { if(r.type) byType[r.type] += parseInt(r.number)||0; });
 
     document.getElementById('userSummary').innerText = `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
-    
+
     const ctx = document.getElementById('userActivityChart').getContext('2d');
     const values = [byType.happn, byType.instagram, byType.lid];
     if(window.userChart){
@@ -344,46 +352,74 @@ document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
     } else {
       window.userChart = new Chart(ctx,{
         type:'doughnut',
-        data:{ labels:['Happn','Instagram','Лид'], datasets:[{ data: values, backgroundColor:['#f59e0b','#10b981','#3b82f6'] }] },
+        data:{
+          labels:['Happn','Instagram','Лид'],
+          datasets:[{ data: values, backgroundColor:['#f59e0b','#10b981','#3b82f6'] }]
+        },
         options:{cutout:'60%', animation:{duration:400}}
       });
     }
   }catch(e){ console.error(e); document.getElementById('userSummary').innerText='Ошибка'; }
 });
+
 document.getElementById('clearUserBtn').addEventListener('click', ()=>{
-  document.getElementById('viewUsername').value='';
-  document.getElementById('userSummary').innerText='No user selected';
-  if(window.userChart){ window.userChart.data.datasets[0].data=[0,0,0]; window.userChart.update(); }
+  document.getElementById('viewUsername').value = '';
+  document.getElementById('userSummary').innerText = 'No user selected';
+  if(window.userChart) { window.userChart.data.datasets[0].data = [0,0,0]; window.userChart.update(); }
 });
 
-/* ====== Feedback ====== */
-document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
+/* ========= Utilities ========= */
+function escapeHtml(text){
+  if(!text && text!==0) return '';
+  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* ========= Feedback block ========= */
+document.getElementById('sendFeedbackBtn').addEventListener('click', async () => {
   const userId = document.getElementById('feedbackUserSelect').value;
   const text = document.getElementById('feedbackText').value.trim();
   const status = document.getElementById('feedbackStatus');
-  if(!userId){ status.textContent="Выбери пользователя!"; return; }
-  if(!text){ status.textContent="Напиши текст фидбэка!"; return; }
-  status.textContent="Отправка…";
-  try{
-    const res = await fetch('/api/feedback/send',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({telegram_id:userId,text})
+
+  if (!userId) { status.textContent = "Выбери пользователя!"; return; }
+  if (!text) { status.textContent = "Напиши текст фидбэка!"; return; }
+  status.textContent = "Отправка…";
+
+  try {
+    const res = await fetch('/api/feedback/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram_id: userId, text })
     });
     const data = await res.json();
-    if(data.ok){ status.textContent="Фидбек отправлен!"; document.getElementById('feedbackText').value=""; }
-    else{ status.textContent="Ошибка: "+data.error; }
-  }catch(e){ console.error(e); status.textContent="Ошибка соединения"; }
+    if (data.ok) {
+      status.textContent = "Фидбек отправлен!";
+      document.getElementById('feedbackText').value = "";
+    } else {
+      status.textContent = "Ошибка: " + data.error;
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = "Ошибка соединения";
+  }
 });
 
-/* ====== Auto-refresh ====== */
-async function refreshAll(){ await Promise.all([loadReports(), loadTeam(), loadGlobalChart()]); }
+/* ========= Auto-refresh ========= */
+let periodicHandle = null;
+async function refreshAll(){
+  const state = preserveStateStart();
+  await Promise.all([ loadReports(), loadTeam(), loadGlobalChart() ]);
+  preserveStateEnd(state);
+}
 document.getElementById('refreshBtn').addEventListener('click', refreshAll);
-document.getElementById('periodSelect').addEventListener('change', loadGlobalChart);
-let periodicHandle = setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
+document.getElementById('periodSelect').addEventListener('change', () => { loadGlobalChart(); });
 
-/* ====== Init ====== */
-(async function init(){ await refreshAll(); })();
+(async function init(){
+  await refreshAll();
+  if(periodicHandle) clearInterval(periodicHandle);
+  periodicHandle = setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
+})();
+
+window.addEventListener('beforeunload', ()=>{ if(periodicHandle) clearInterval(periodicHandle); });
 
 </script>
 </body>
