@@ -108,6 +108,41 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+// Добавление нового пользователя
+app.post('/api/users/add', async (req, res) => {
+  try {
+    const { username, display_name } = req.body;
+    if (!username) return res.status(400).json({ ok: false, error: 'username missing' });
+    const user = await db.addUser({ username, display_name });
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Удаление пользователя
+app.post('/api/users/:id/delete', async (req, res) => {
+  try {
+    const id = req.params.id;
+    await db.deleteUser(id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Назначение роли пользователю
+app.post('/api/users/:id/role', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { role } = req.body;
+    await db.setUserRole(id, role);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Получение всех отчетов
 app.get('/api/reports', async (req, res) => {
   try {
@@ -139,7 +174,7 @@ app.post('/api/reports/:id/reject', async (req, res) => {
   }
 });
 
-// Глобальная статистика (period: today|yesterday|week|month)
+// Глобальная статистика
 app.get('/api/stats/global', async (req, res) => {
   try {
     const period = req.query.period || 'today';
@@ -172,7 +207,7 @@ app.get('/api/stats/global', async (req, res) => {
   }
 });
 
-// SEND FEEDBACK -> send message via bot to telegram_id
+// SEND FEEDBACK
 app.post('/api/feedback/send', async (req, res) => {
   try {
     const { telegram_id, text } = req.body;
@@ -180,7 +215,6 @@ app.post('/api/feedback/send', async (req, res) => {
     if (!text) return res.json({ ok: false, error: 'text missing' });
     if (!bot) return res.json({ ok: false, error: 'Bot not active' });
 
-    // send a formatted message
     const message = `📨 *Фидбек от менеджера*\n\n${text}`;
     await bot.sendMessage(String(telegram_id), message, { parse_mode: 'Markdown' });
 
@@ -191,7 +225,7 @@ app.post('/api/feedback/send', async (req, res) => {
   }
 });
 
-// User summary per username (optional)
+// User summary per username
 app.get('/api/users/:username/summary', async (req, res) => {
   try {
     const user = await db.getUserByUsername(req.params.username);

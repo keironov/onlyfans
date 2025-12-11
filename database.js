@@ -11,7 +11,8 @@ export function init() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         telegram_id TEXT UNIQUE,
         username TEXT UNIQUE,
-        display_name TEXT
+        display_name TEXT,
+        role TEXT DEFAULT ''
       )
     `);
 
@@ -49,25 +50,49 @@ export function init() {
 
 export function ensureUserByTelegram(telegram_id, username, display) {
   return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT * FROM users WHERE telegram_id = ?`,
-      [telegram_id],
-      (err, row) => {
-        if (err) return reject(err);
-        if (row) return resolve(row);
+    db.get(`SELECT * FROM users WHERE telegram_id = ?`, [telegram_id], (err, row) => {
+      if (err) return reject(err);
+      if (row) return resolve(row);
+      db.run(
+        `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
+        [telegram_id, username, display],
+        function (err2) {
+          if (err2) return reject(err2);
+          db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) => e ? reject(e) : resolve(r));
+        }
+      );
+    });
+  });
+}
 
-        db.run(
-          `INSERT INTO users (telegram_id, username, display_name) VALUES (?, ?, ?)`,
-          [telegram_id, username, display],
-          function (err2) {
-            if (err2) return reject(err2);
-            db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
-              e ? reject(e) : resolve(r)
-            );
-          }
-        );
+export function addUser({ username, display_name, telegram_id = null, role = '' }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO users (username, display_name, telegram_id, role) VALUES (?, ?, ?, ?)`,
+      [username, display_name, telegram_id, role],
+      function(err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) => e ? reject(e) : resolve(r));
       }
     );
+  });
+}
+
+export function deleteUser(id) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM users WHERE id = ?`, [id], function(err){
+      if(err) return reject(err);
+      resolve({ ok: true });
+    });
+  });
+}
+
+export function updateUserRole(id, role) {
+  return new Promise((resolve, reject) => {
+    db.run(`UPDATE users SET role = ? WHERE id = ?`, [role, id], function(err){
+      if(err) return reject(err);
+      db.get(`SELECT * FROM users WHERE id = ?`, [id], (e,r) => e ? reject(e) : resolve(r));
+    });
   });
 }
 
@@ -92,15 +117,16 @@ export function addReport({ user_id, text, created_at }) {
     const length = text ? text.length : 0;
     const suspicious = length < 5 ? 1 : 0;
     const task_type = length < 20 ? 'short' : 'long';
-
     db.run(
       `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [user_id, text, task_type, length, suspicious, created_at],
       function (err) {
         if (err) return reject(err);
-        db.get(`SELECT reports.*, users.username FROM reports LEFT JOIN users ON users.id = reports.user_id WHERE reports.id = ?`, [this.lastID], (e, r) =>
-          e ? reject(e) : resolve(r)
+        db.get(
+          `SELECT reports.*, users.username FROM reports LEFT JOIN users ON users.id = reports.user_id WHERE reports.id = ?`,
+          [this.lastID],
+          (e, r) => e ? reject(e) : resolve(r)
         );
       }
     );
@@ -171,20 +197,6 @@ export function listFeedback() {
        LEFT JOIN users m ON m.id = feedback.manager_id
        ORDER BY feedback.id DESC`,
       (err, rows) => (err ? reject(err) : resolve(rows))
-    );
-  });
-}
-
-export function globalSummary() {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT 
-         COUNT(*) AS reports_total,
-         SUM(length) AS total_length,
-         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
-       FROM reports
-       WHERE status = 'approved'`,
-      (err, row) => (err ? reject(err) : resolve(row))
     );
   });
 }
