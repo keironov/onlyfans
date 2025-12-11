@@ -4,81 +4,486 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Team Dashboard - Enhanced</title>
+<link rel="icon" href="https://public-frontend-cos.metadl.com/mgx/img/favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 :root{
-  --bg:#0b1220;
-  --card:#111827;
-  --muted:#9ca3af;
+  --bg-primary:#0a0e1a;
+  --bg-secondary:#0f1419;
+  --glass-bg:rgba(255,255,255,0.03);
+  --glass-border:rgba(255,255,255,0.08);
+  --text-primary:#e8f0ff;
+  --text-secondary:#8b92a8;
   --accent:#f59e0b;
-  --accent-dark:#d48806;
-  --input-bg:#0f1724;
+  --accent-hover:#fbbf24;
   --accent-green:#10b981;
   --accent-red:#ef4444;
   --accent-blue:#3b82f6;
+  --accent-purple:#a855f7;
+  --shadow:0 8px 32px rgba(0,0,0,0.4);
 }
-html,body{height:100%;margin:0;padding:0;background:linear-gradient(180deg,var(--bg),#0f1724);color:#e6eef8;font-family:Inter,Arial,Helvetica,sans-serif;}
-.wrap{max-width:1400px;margin:20px auto;padding:18px;}
-.top{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px;}
-.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow: 0 6px 18px rgba(2,6,23,0.6);margin-bottom:12px;}
-.grid{display:grid;grid-template-columns:1fr 420px;gap:16px;}
-.team-list{max-height:420px;overflow:auto;padding:8px;}
-.user-row{display:flex;justify-content:space-between;padding:8px;border-bottom:1px dashed rgba(255,255,255,0.03);align-items:center;gap:8px;}
-.muted{color:var(--muted);font-size:13px;}
-.small{font-size:13px;color:var(--muted);}
-h1,h3{margin:0 0 8px 0;}
-input,textarea,select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.05);background:var(--input-bg);color:inherit;box-sizing:border-box;outline:none;transition:box-shadow .18s, border-color .18s;}
-input:focus, textarea:focus, select:focus{box-shadow:0 0 8px rgba(245,158,11,0.14);border-color:rgba(245,158,11,0.28);}
-input[type="number"]{width:80px;padding:6px 8px;border-radius:8px;text-align:center;}
-button{background:var(--accent);color:#081125;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600;transition:opacity .2s;}
-button:hover{opacity:0.9;}
-button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:6px 10px;}
-button.danger{background:var(--accent-red);color:#fff;}
-.action-btn{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;border:none;}
-.approve{background:var(--accent-green);color:#081125;}
-.reject{background:var(--accent-red);color:#fff;}
-table{width:100%;border-collapse:collapse;color:#e6eef8;}
-th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:left;vertical-align:middle;}
-thead th{color:var(--muted);font-weight:600;font-size:13px;}
-.pending-row{background:transparent;}
-.pending-row:hover{background:rgba(255,255,255,0.01);}
-.table-select {width:140px;padding:6px;border-radius:8px;background:var(--input-bg);}
-canvas{max-width:100%;}
-.insight-item{padding:10px;margin:6px 0;border-left:3px solid var(--accent);background:rgba(245,158,11,0.05);border-radius:6px;}
-.insight-success{border-left-color:var(--accent-green);background:rgba(16,185,129,0.05);}
-.insight-warning{border-left-color:var(--accent-red);background:rgba(239,68,68,0.05);}
-.worklog-item{padding:8px;margin:4px 0;border-radius:6px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center;}
-.status-badge{padding:4px 8px;border-radius:6px;font-size:12px;font-weight:600;}
-.status-working{background:var(--accent-green);color:#081125;}
-.status-absent{background:var(--accent-red);color:#fff;}
-.status-evening{background:var(--accent);color:#081125;}
-.tabs{display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.06);}
-.tab{padding:8px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;}
-.tab.active{border-bottom-color:var(--accent);color:var(--accent);}
-.tab:hover{background:rgba(255,255,255,0.02);}
-@media (max-width:980px){ .grid{grid-template-columns:1fr;} .wrap{padding:12px;} }
+
+*{box-sizing:border-box;margin:0;padding:0;}
+
+html,body{
+  height:100%;
+  background:radial-gradient(ellipse at top, #1a1f35 0%, var(--bg-primary) 50%);
+  color:var(--text-primary);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  overflow-x:hidden;
+}
+
+body::before{
+  content:'';
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(245,158,11,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(59,130,246,0.06) 0%, transparent 50%);
+  pointer-events:none;
+  z-index:0;
+}
+
+.wrap{
+  max-width:1600px;
+  margin:0 auto;
+  padding:24px;
+  position:relative;
+  z-index:1;
+}
+
+.top{
+  display:flex;
+  gap:16px;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:24px;
+  padding:24px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:24px;
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow);
+}
+
+.top h1{
+  font-size:32px;
+  font-weight:700;
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+
+.muted{color:var(--text-secondary);font-size:14px;}
+.small{font-size:13px;color:var(--text-secondary);}
+
+.card{
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:24px;
+  padding:24px;
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow);
+  margin-bottom:20px;
+  transition:all 0.3s ease;
+}
+
+.card:hover{
+  border-color:rgba(245,158,11,0.2);
+  box-shadow:0 12px 48px rgba(0,0,0,0.5);
+  transform:translateY(-2px);
+}
+
+.card h3{
+  font-size:20px;
+  font-weight:600;
+  margin-bottom:16px;
+  color:var(--text-primary);
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+
+.grid-3{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:20px;
+}
+
+input,textarea,select{
+  width:100%;
+  padding:12px 16px;
+  border-radius:16px;
+  border:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.02);
+  color:var(--text-primary);
+  outline:none;
+  transition:all 0.3s ease;
+  font-size:14px;
+}
+
+input:focus,textarea:focus,select:focus{
+  background:rgba(255,255,255,0.04);
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(245,158,11,0.1);
+}
+
+input[type="number"]{
+  width:90px;
+  text-align:center;
+}
+
+button{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+  border:none;
+  padding:12px 24px;
+  border-radius:16px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:14px;
+  transition:all 0.3s ease;
+  box-shadow:0 4px 16px rgba(245,158,11,0.3);
+}
+
+button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 24px rgba(245,158,11,0.4);
+}
+
+button:active{
+  transform:translateY(0);
+}
+
+button.secondary{
+  background:rgba(255,255,255,0.05);
+  color:var(--text-primary);
+  border:1px solid var(--glass-border);
+  box-shadow:none;
+}
+
+button.secondary:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:var(--accent);
+}
+
+button.danger{
+  background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
+  color:#fff;
+  box-shadow:0 4px 16px rgba(239,68,68,0.3);
+}
+
+.action-btn{
+  width:40px;
+  height:40px;
+  border-radius:12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  cursor:pointer;
+  border:none;
+  transition:all 0.3s ease;
+}
+
+.approve{
+  background:linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(16,185,129,0.3);
+}
+
+.approve:hover{transform:scale(1.05);}
+
+.reject{
+  background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(239,68,68,0.3);
+}
+
+.reject:hover{transform:scale(1.05);}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0 8px;
+}
+
+th,td{
+  padding:12px 16px;
+  text-align:left;
+  vertical-align:middle;
+}
+
+thead th{
+  color:var(--text-secondary);
+  font-weight:600;
+  font-size:13px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  border-bottom:1px solid var(--glass-border);
+}
+
+tbody tr{
+  background:rgba(255,255,255,0.02);
+  border-radius:12px;
+  transition:all 0.3s ease;
+}
+
+tbody tr:hover{
+  background:rgba(255,255,255,0.04);
+  transform:translateX(4px);
+}
+
+.table-select{
+  width:160px;
+  padding:8px 12px;
+  border-radius:12px;
+}
+
+canvas{max-width:100%;border-radius:16px;}
+
+.tabs{
+  display:flex;
+  gap:12px;
+  margin-bottom:24px;
+  padding:8px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:20px;
+  border:1px solid var(--glass-border);
+}
+
+.tab{
+  padding:12px 24px;
+  cursor:pointer;
+  border-radius:14px;
+  transition:all 0.3s ease;
+  font-weight:500;
+  color:var(--text-secondary);
+}
+
+.tab:hover{
+  background:rgba(255,255,255,0.05);
+  color:var(--text-primary);
+}
+
+.tab.active{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+  box-shadow:0 4px 16px rgba(245,158,11,0.3);
+}
+
+.tab-content{display:none;}
+
+.insight-item{
+  padding:16px;
+  margin:8px 0;
+  border-left:4px solid var(--accent);
+  background:rgba(245,158,11,0.08);
+  border-radius:12px;
+  backdrop-filter:blur(10px);
+  transition:all 0.3s ease;
+}
+
+.insight-item:hover{
+  background:rgba(245,158,11,0.12);
+  transform:translateX(4px);
+}
+
+.insight-success{
+  border-left-color:var(--accent-green);
+  background:rgba(16,185,129,0.08);
+}
+
+.insight-success:hover{background:rgba(16,185,129,0.12);}
+
+.insight-warning{
+  border-left-color:var(--accent-red);
+  background:rgba(239,68,68,0.08);
+}
+
+.insight-warning:hover{background:rgba(239,68,68,0.12);}
+
+.worklog-item{
+  padding:16px;
+  margin:8px 0;
+  border-radius:16px;
+  background:rgba(255,255,255,0.03);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  transition:all 0.3s ease;
+  border:1px solid var(--glass-border);
+}
+
+.worklog-item:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--accent);
+}
+
+.status-badge{
+  padding:6px 14px;
+  border-radius:12px;
+  font-size:12px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+
+.status-working{
+  background:linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);
+  color:#fff;
+}
+
+.status-absent{
+  background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
+  color:#fff;
+}
+
+.status-evening{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+}
+
+.stat-card{
+  background:rgba(255,255,255,0.03);
+  border-radius:16px;
+  padding:20px;
+  border:1px solid var(--glass-border);
+  transition:all 0.3s ease;
+}
+
+.stat-card:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--accent);
+  transform:translateY(-2px);
+}
+
+.stat-number{
+  font-size:32px;
+  font-weight:700;
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+
+.stat-label{
+  font-size:13px;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+
+.user-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 16px;
+  margin:6px 0;
+  border-radius:12px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--glass-border);
+  transition:all 0.3s ease;
+  gap:12px;
+}
+
+.user-row:hover{
+  background:rgba(255,255,255,0.04);
+  border-color:var(--accent);
+}
+
+.team-list{
+  max-height:500px;
+  overflow:auto;
+  padding:8px;
+}
+
+.team-list::-webkit-scrollbar{width:8px;}
+.team-list::-webkit-scrollbar-track{background:rgba(255,255,255,0.02);border-radius:8px;}
+.team-list::-webkit-scrollbar-thumb{background:var(--accent);border-radius:8px;}
+
+.ranking-item{
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:16px;
+  margin:8px 0;
+  border-radius:16px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--glass-border);
+  transition:all 0.3s ease;
+}
+
+.ranking-item:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--accent-red);
+}
+
+.ranking-badge{
+  width:48px;
+  height:48px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:18px;
+  flex-shrink:0;
+}
+
+.rank-1{background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);color:#0a0e1a;}
+.rank-2{background:linear-gradient(135deg, #94a3b8 0%, #64748b 100%);color:#fff;}
+.rank-3{background:linear-gradient(135deg, #fb923c 0%, #f97316 100%);color:#fff;}
+.rank-other{background:rgba(255,255,255,0.05);color:var(--text-secondary);}
+
+.period-selector{
+  padding:10px 16px;
+  border-radius:14px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--glass-border);
+  color:var(--text-primary);
+  font-weight:500;
+}
+
+@media (max-width:1200px){
+  .grid,.grid-3{grid-template-columns:1fr;}
+  .wrap{padding:16px;}
+}
+
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(10px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+.card{animation:fadeIn 0.5s ease;}
 </style>
 </head>
 <body>
 <div class="wrap" id="wrap">
   <div class="top">
     <div>
-      <h1>Team Dashboard - Enhanced</h1>
+      <h1>Team Dashboard Enhanced</h1>
       <div class="muted">OnlyFans Agency Management System</div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:12px;align-items:center">
       <select id="periodSelect" class="period-selector" title="Период">
         <option value="today">Сегодня</option>
         <option value="yesterday">Вчера</option>
         <option value="week">Неделя</option>
         <option value="month">Месяц</option>
       </select>
-      <button id="refreshBtn" class="secondary">Refresh</button>
+      <button id="refreshBtn" class="secondary">🔄 Обновить</button>
     </div>
   </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="reports">📊 Отчеты</div>
+    <div class="tab" data-tab="stats">📈 Статистика</div>
     <div class="tab" data-tab="team">👥 Команда</div>
     <div class="tab" data-tab="insights">💡 Подсказки</div>
     <div class="tab" data-tab="worklog">📝 Блог работы</div>
@@ -89,20 +494,43 @@ canvas{max-width:100%;}
     <div class="grid">
       <div>
         <div class="card">
-          <h3>Global Stats</h3>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <div id="globalSummary" class="small muted">Loading...</div>
-            <div style="font-size:13px;color:var(--muted)">Автообновление каждые 3с</div>
+          <h3>📊 Global Stats</h3>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div id="globalSummary" class="small muted">Загрузка...</div>
+            <div style="font-size:12px;color:var(--text-secondary)">⏱ Автообновление каждые 3с</div>
           </div>
-          <canvas id="globalChart" style="height:220px;"></canvas>
+          <canvas id="globalChart" style="height:240px;"></canvas>
+          
+          <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--glass-border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+              <h4 style="font-size:16px;font-weight:600;">Статистика одобрений</h4>
+              <div id="approvalRatio" class="small muted"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="stat-card">
+                <div class="stat-number" id="totalApproved">0</div>
+                <div class="stat-label">✔ Одобрено</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-number" id="totalRejected" style="background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">0</div>
+                <div class="stat-label">✖ Отклонено</div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="card">
-          <h3>Отчеты (ожидающие подтверждения)</h3>
-          <div style="overflow:auto;max-height:360px;">
+          <h3>📋 Отчеты (ожидающие подтверждения)</h3>
+          <div style="overflow:auto;max-height:400px;">
             <table>
               <thead>
-                <tr><th style="width:16%">@user</th><th style="width:44%">Text</th><th style="width:12%">Number</th><th style="width:14%">Type</th><th style="width:14%">✔ / ❌</th></tr>
+                <tr>
+                  <th style="width:16%">@user</th>
+                  <th style="width:42%">Text</th>
+                  <th style="width:12%">Number</th>
+                  <th style="width:14%">Type</th>
+                  <th style="width:16%">✔ / ❌</th>
+                </tr>
               </thead>
               <tbody id="reportsTable"></tbody>
             </table>
@@ -112,27 +540,14 @@ canvas{max-width:100%;}
 
       <div>
         <div class="card">
-          <h3>User Summary</h3>
-          <div style="display:grid;gap:8px">
-            <input id="viewUsername" placeholder="username (e.g. @ivan)" />
-            <div style="display:flex;gap:8px">
-              <button id="viewUserBtn">View</button>
-              <button id="clearUserBtn" class="secondary">Clear</button>
-            </div>
-            <div id="userSummary" class="small muted">No user selected</div>
-            <canvas id="userActivityChart" style="height:180px;margin-top:8px;"></canvas>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>Отправить фидбек</h3>
-          <div style="display:grid;gap:8px">
+          <h3>💬 Отправить фидбек</h3>
+          <div style="display:grid;gap:12px">
             <select id="feedbackUserSelect">
               <option value="">Выбери пользователя…</option>
             </select>
-            <textarea id="feedbackText" rows="3" placeholder="Текст фидбэка"></textarea>
-            <div style="display:flex;gap:8px;align-items:center">
-              <button id="sendFeedbackBtn">Отправить</button>
+            <textarea id="feedbackText" rows="4" placeholder="Текст фидбэка"></textarea>
+            <div style="display:flex;gap:12px;align-items:center">
+              <button id="sendFeedbackBtn">📤 Отправить</button>
               <div id="feedbackStatus" class="small muted"></div>
             </div>
           </div>
@@ -141,21 +556,45 @@ canvas{max-width:100%;}
     </div>
   </div>
 
+  <!-- TAB: STATISTICS -->
+  <div id="tab-stats" class="tab-content" style="display:none;">
+    <div class="grid">
+      <div class="card">
+        <h3>📈 Рост команды</h3>
+        <canvas id="teamGrowthChart" style="height:280px;"></canvas>
+      </div>
+      <div class="card">
+        <h3>📊 Рост конверсий</h3>
+        <canvas id="conversionGrowthChart" style="height:280px;"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>👤 Детальная статистика по пользователям</h3>
+      <div id="userDetailedStats" style="display:grid;gap:12px;"></div>
+    </div>
+
+    <div class="card">
+      <h3>🚫 Рейтинг пропусков работы</h3>
+      <div id="absenceRanking"></div>
+    </div>
+  </div>
+
   <!-- TAB: TEAM -->
   <div id="tab-team" class="tab-content" style="display:none;">
     <div class="grid">
       <div class="card">
-        <h3>Управление командой</h3>
-        <div style="display:grid;gap:8px;margin-bottom:16px;">
+        <h3>👥 Управление командой</h3>
+        <div style="display:grid;gap:12px;margin-bottom:20px;">
           <input id="newUsername" placeholder="Введи username (например @ivan)" />
-          <button id="addUserBtn">Добавить в команду</button>
+          <button id="addUserBtn">➕ Добавить в команду</button>
           <div id="addUserStatus" class="small muted"></div>
         </div>
-        <div id="teamList" class="team-list small">Loading...</div>
+        <div id="teamList" class="team-list small">Загрузка...</div>
       </div>
       <div class="card">
-        <h3>Статистика команды</h3>
-        <div id="teamStats" class="small muted">Loading...</div>
+        <h3>📊 Статистика команды</h3>
+        <div id="teamStats" class="small muted">Загрузка...</div>
       </div>
     </div>
   </div>
@@ -163,9 +602,9 @@ canvas{max-width:100%;}
   <!-- TAB: INSIGHTS -->
   <div id="tab-insights" class="tab-content" style="display:none;">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h3>Умные подсказки</h3>
-        <button id="generateInsightsBtn">Сгенерировать подсказки</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3>💡 Умные подсказки</h3>
+        <button id="generateInsightsBtn">✨ Сгенерировать подсказки</button>
       </div>
       <div id="insightsList" class="small muted">Нажми "Сгенерировать подсказки" для анализа</div>
     </div>
@@ -175,25 +614,25 @@ canvas{max-width:100%;}
   <div id="tab-worklog" class="tab-content" style="display:none;">
     <div class="grid">
       <div class="card">
-        <h3>Добавить запись</h3>
-        <div style="display:grid;gap:8px;">
+        <h3>➕ Добавить запись</h3>
+        <div style="display:grid;gap:12px;">
           <select id="worklogUser">
             <option value="">Выбери пользователя…</option>
           </select>
           <input type="date" id="worklogDate" />
           <select id="worklogStatus">
-            <option value="working">Вышел на работу</option>
-            <option value="absent">Не вышел на работу</option>
-            <option value="evening">Выйдет вечером</option>
+            <option value="working">✅ Вышел на работу</option>
+            <option value="absent">❌ Не вышел на работу</option>
+            <option value="evening">🌙 Выйдет вечером</option>
           </select>
-          <textarea id="worklogReason" rows="2" placeholder="Причина (если не вышел)"></textarea>
-          <button id="addWorklogBtn">Добавить запись</button>
+          <textarea id="worklogReason" rows="3" placeholder="Причина (если не вышел)"></textarea>
+          <button id="addWorklogBtn">💾 Добавить запись</button>
           <div id="worklogStatus" class="small muted"></div>
         </div>
       </div>
       <div class="card">
-        <h3>История работы</h3>
-        <div id="worklogList" style="max-height:500px;overflow:auto;">Loading...</div>
+        <h3>📜 История работы</h3>
+        <div id="worklogList" style="max-height:500px;overflow:auto;">Загрузка...</div>
       </div>
     </div>
   </div>
@@ -206,10 +645,12 @@ const reportsTable = document.getElementById('reportsTable');
 const globalSummaryEl = document.getElementById('globalSummary');
 const globalChartCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
+let teamGrowthChart = null;
+let conversionGrowthChart = null;
 
 function escapeHtml(text){
   if(!text && text!==0) return '';
-  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"'"}[m]));
 }
 
 /* ========= Tab Switching ========= */
@@ -218,7 +659,13 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
     tab.classList.add('active');
-    document.getElementById('tab-' + tab.dataset.tab).style.display = 'block';
+    const tabName = tab.dataset.tab;
+    document.getElementById('tab-' + tabName).style.display = 'block';
+    
+    // Load data when switching to stats tab
+    if(tabName === 'stats'){
+      loadStatistics();
+    }
   });
 });
 
@@ -265,7 +712,7 @@ async function loadReports(){
         tr.innerHTML = `
           <td class="table-username">${escapeHtml(rep.username||'—')}</td>
           <td class="report-text" style="white-space:normal;word-break:break-word">${escapeHtml(rep.text)}</td>
-          <td><input type="number" value="0" style="width:72px" /></td>
+          <td><input type="number" value="0" style="width:80px" /></td>
           <td>
             <select class="table-select">
               <option value="happn">Happn</option>
@@ -275,7 +722,7 @@ async function loadReports(){
           </td>
           <td>
             <button class="action-btn approve">✔</button>
-            <button class="action-btn reject" style="margin-left:6px">✖</button>
+            <button class="action-btn reject" style="margin-left:8px">✖</button>
           </td>
         `;
         reportsTable.appendChild(tr);
@@ -293,12 +740,14 @@ async function loadReports(){
             });
             tr.remove();
             await loadGlobalChart();
+            await loadApprovalStats();
           } catch(e){ console.error(e); }
         });
         tr.querySelector('.reject').addEventListener('click', async ()=>{
           try {
             await fetch(`/api/reports/${id}/reject`,{ method:'POST' });
             tr.remove();
+            await loadApprovalStats();
           } catch(e){ console.error(e); }
         });
       } else {
@@ -349,58 +798,39 @@ async function loadGlobalChart(){
           }]
         },
         options:{
-          plugins:{legend:{position:'bottom',labels:{boxWidth:12}}},
-          cutout: '60%',
-          animation:{duration:500}
+          plugins:{
+            legend:{
+              position:'bottom',
+              labels:{
+                boxWidth:14,
+                color:'#8b92a8',
+                font:{size:12}
+              }
+            }
+          },
+          cutout: '65%',
+          animation:{duration:600}
         }
       });
     }
   }catch(e){ console.error('loadGlobalChart err', e); globalSummaryEl.innerText='Ошибка'; }
 }
 
-/* ========= USER SUMMARY ========= */
-document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
-  const username = document.getElementById('viewUsername').value.trim();
-  if(!username) return;
+/* ========= APPROVAL STATS ========= */
+async function loadApprovalStats(){
   try{
-    const usersRes = await fetchJson('/api/users');
-    if(!usersRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const user = usersRes.users.find(u => u.username === username);
-    if(!user){ document.getElementById('userSummary').innerText='Не найден'; return; }
-
-    const reportsRes = await fetchJson('/api/reports');
-    if(!reportsRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const userReports = reportsRes.reports.filter(r => r.user_id === user.id && r.status === 'approved');
-
-    const total = userReports.reduce((acc, r) => acc + (parseInt(r.number)||0), 0);
-    const byType = {happn:0, instagram:0, lid:0};
-    userReports.forEach(r => { if(r.type) byType[r.type] += parseInt(r.number)||0; });
-
-    document.getElementById('userSummary').innerText = `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
-
-    const ctx = document.getElementById('userActivityChart').getContext('2d');
-    const values = [byType.happn, byType.instagram, byType.lid];
-    if(window.userChart){
-      window.userChart.data.datasets[0].data = values;
-      window.userChart.update();
-    } else {
-      window.userChart = new Chart(ctx,{
-        type:'doughnut',
-        data:{
-          labels:['Happn','Instagram','Лид'],
-          datasets:[{ data: values, backgroundColor:['#f59e0b','#10b981','#3b82f6'] }]
-        },
-        options:{cutout:'60%', animation:{duration:400}}
-      });
-    }
-  }catch(e){ console.error(e); document.getElementById('userSummary').innerText='Ошибка'; }
-});
-
-document.getElementById('clearUserBtn').addEventListener('click', ()=>{
-  document.getElementById('viewUsername').value = '';
-  document.getElementById('userSummary').innerText = 'No user selected';
-  if(window.userChart) { window.userChart.data.datasets[0].data = [0,0,0]; window.userChart.update(); }
-});
+    const res = await fetchJson('/api/stats/approvals');
+    if(!res.ok) return;
+    const approved = res.stats.total_approved || 0;
+    const rejected = res.stats.total_rejected || 0;
+    const total = approved + rejected;
+    const ratio = total > 0 ? Math.round((approved / total) * 100) : 0;
+    
+    document.getElementById('totalApproved').textContent = approved;
+    document.getElementById('totalRejected').textContent = rejected;
+    document.getElementById('approvalRatio').textContent = `${ratio}% одобрено`;
+  }catch(e){ console.error('loadApprovalStats err', e); }
+}
 
 /* ========= FEEDBACK ========= */
 document.getElementById('sendFeedbackBtn').addEventListener('click', async () => {
@@ -420,14 +850,14 @@ document.getElementById('sendFeedbackBtn').addEventListener('click', async () =>
     });
     const data = await res.json();
     if (data.ok) {
-      status.textContent = "Фидбек отправлен!";
+      status.textContent = "✅ Фидбек отправлен!";
       document.getElementById('feedbackText').value = "";
     } else {
-      status.textContent = "Ошибка: " + data.error;
+      status.textContent = "❌ Ошибка: " + data.error;
     }
   } catch (e) {
     console.error(e);
-    status.textContent = "Ошибка соединения";
+    status.textContent = "❌ Ошибка соединения";
   }
 });
 
@@ -518,15 +948,15 @@ document.getElementById('addUserBtn').addEventListener('click', async () => {
     const data = await res.json();
     
     if (data.ok) {
-      status.textContent = 'Пользователь добавлен!';
+      status.textContent = '✅ Пользователь добавлен!';
       document.getElementById('newUsername').value = '';
       await loadTeam();
     } else {
-      status.textContent = 'Ошибка: ' + data.error;
+      status.textContent = '❌ Ошибка: ' + data.error;
     }
   } catch (e) {
     console.error(e);
-    status.textContent = 'Ошибка соединения';
+    status.textContent = '❌ Ошибка соединения';
   }
 });
 
@@ -536,14 +966,14 @@ async function loadTeamStats() {
     if (!res.ok) return;
     
     const statsEl = document.getElementById('teamStats');
-    let html = '<div style="display:grid;gap:8px;">';
+    let html = '<div style="display:grid;gap:12px;">';
     
     res.stats.forEach(user => {
       const total = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
       html += `
-        <div style="padding:8px;background:rgba(255,255,255,0.02);border-radius:6px;">
-          <div style="font-weight:600;color:var(--accent);">${escapeHtml(user.username || 'Unknown')}</div>
-          <div class="small" style="margin-top:4px;">
+        <div style="padding:16px;background:rgba(255,255,255,0.03);border-radius:16px;border:1px solid var(--glass-border);">
+          <div style="font-weight:600;color:var(--accent);margin-bottom:8px;">${escapeHtml(user.username || 'Unknown')}</div>
+          <div class="small" style="margin-bottom:4px;">
             Роль: ${user.role || 'Не назначена'} · Отчетов: ${user.approved_reports || 0} · Конверсий: ${total}
           </div>
           <div class="small">
@@ -588,10 +1018,254 @@ function fillWorklogUsers(users){
   if(cur) sel.value = cur;
 }
 
+/* ========= STATISTICS ========= */
+async function loadStatistics(){
+  await loadTeamGrowth();
+  await loadConversionGrowth();
+  await loadUserDetailedStats();
+  await loadAbsenceRanking();
+}
+
+async function loadTeamGrowth(){
+  try{
+    const res = await fetchJson('/api/stats/growth/team');
+    if(!res.ok) return;
+    
+    const labels = res.growth.map(g => g.date);
+    const data = res.growth.map(g => g.count);
+    
+    // Calculate cumulative
+    const cumulative = [];
+    let sum = 0;
+    data.forEach(v => {
+      sum += v;
+      cumulative.push(sum);
+    });
+    
+    const ctx = document.getElementById('teamGrowthChart').getContext('2d');
+    if(teamGrowthChart){
+      teamGrowthChart.data.labels = labels;
+      teamGrowthChart.data.datasets[0].data = cumulative;
+      teamGrowthChart.update();
+    } else {
+      teamGrowthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Размер команды',
+            data: cumulative,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              labels: {color: '#8b92a8', font: {size: 12}}
+            }
+          },
+          scales: {
+            x: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            },
+            y: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            }
+          }
+        }
+      });
+    }
+  }catch(e){ console.error('loadTeamGrowth err', e); }
+}
+
+async function loadConversionGrowth(){
+  try{
+    const [happnRes, instaRes, lidRes] = await Promise.all([
+      fetchJson('/api/stats/growth/happn'),
+      fetchJson('/api/stats/growth/instagram'),
+      fetchJson('/api/stats/growth/lid')
+    ]);
+    
+    if(!happnRes.ok || !instaRes.ok || !lidRes.ok) return;
+    
+    // Merge all dates
+    const allDates = new Set();
+    happnRes.growth.forEach(g => allDates.add(g.date));
+    instaRes.growth.forEach(g => allDates.add(g.date));
+    lidRes.growth.forEach(g => allDates.add(g.date));
+    
+    const labels = Array.from(allDates).sort();
+    
+    const happnData = labels.map(date => {
+      const found = happnRes.growth.find(g => g.date === date);
+      return found ? found.total : 0;
+    });
+    
+    const instaData = labels.map(date => {
+      const found = instaRes.growth.find(g => g.date === date);
+      return found ? found.total : 0;
+    });
+    
+    const lidData = labels.map(date => {
+      const found = lidRes.growth.find(g => g.date === date);
+      return found ? found.total : 0;
+    });
+    
+    const ctx = document.getElementById('conversionGrowthChart').getContext('2d');
+    if(conversionGrowthChart){
+      conversionGrowthChart.data.labels = labels;
+      conversionGrowthChart.data.datasets[0].data = happnData;
+      conversionGrowthChart.data.datasets[1].data = instaData;
+      conversionGrowthChart.data.datasets[2].data = lidData;
+      conversionGrowthChart.update();
+    } else {
+      conversionGrowthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Happn',
+              data: happnData,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245,158,11,0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Instagram',
+              data: instaData,
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16,185,129,0.1)',
+              tension: 0.4
+            },
+            {
+              label: 'Лид',
+              data: lidData,
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59,130,246,0.1)',
+              tension: 0.4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              labels: {color: '#8b92a8', font: {size: 12}}
+            }
+          },
+          scales: {
+            x: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            },
+            y: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            }
+          }
+        }
+      });
+    }
+  }catch(e){ console.error('loadConversionGrowth err', e); }
+}
+
+async function loadUserDetailedStats(){
+  try{
+    const res = await fetchJson('/api/stats/detailed');
+    if(!res.ok) return;
+    
+    const container = document.getElementById('userDetailedStats');
+    let html = '';
+    
+    res.stats.forEach(user => {
+      const total = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
+      const approvalRate = user.total_reports > 0 ? Math.round((user.approved_reports / user.total_reports) * 100) : 0;
+      
+      html += `
+        <div style="padding:20px;background:rgba(255,255,255,0.03);border-radius:16px;border:1px solid var(--glass-border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:600;font-size:18px;color:var(--accent);margin-bottom:4px;">${escapeHtml(user.username || 'Unknown')}</div>
+              <div class="small">Роль: ${user.role || 'Не назначена'}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:24px;font-weight:700;color:var(--accent);">${total}</div>
+              <div class="small">конверсий</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;">
+            <div class="stat-card">
+              <div style="font-size:20px;font-weight:700;color:#f59e0b;">${user.happn_total || 0}</div>
+              <div class="stat-label">Happn</div>
+            </div>
+            <div class="stat-card">
+              <div style="font-size:20px;font-weight:700;color:#10b981;">${user.instagram_total || 0}</div>
+              <div class="stat-label">Instagram</div>
+            </div>
+            <div class="stat-card">
+              <div style="font-size:20px;font-weight:700;color:#3b82f6;">${user.lid_total || 0}</div>
+              <div class="stat-label">Лид</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--glass-border);display:flex;justify-content:space-between;">
+            <div class="small">Отчетов: ${user.total_reports || 0}</div>
+            <div class="small">Одобрено: ${user.approved_reports || 0} (${approvalRate}%)</div>
+            <div class="small">Отклонено: ${user.rejected_reports || 0}</div>
+          </div>
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+  }catch(e){ console.error('loadUserDetailedStats err', e); }
+}
+
+async function loadAbsenceRanking(){
+  try{
+    const res = await fetchJson('/api/stats/absences');
+    if(!res.ok) return;
+    
+    const container = document.getElementById('absenceRanking');
+    
+    if(res.ranking.length === 0){
+      container.innerHTML = '<div class="small muted">Нет данных о пропусках</div>';
+      return;
+    }
+    
+    let html = '';
+    res.ranking.forEach((user, index) => {
+      const rank = index + 1;
+      let badgeClass = 'ranking-badge rank-other';
+      if(rank === 1) badgeClass = 'ranking-badge rank-1';
+      else if(rank === 2) badgeClass = 'ranking-badge rank-2';
+      else if(rank === 3) badgeClass = 'ranking-badge rank-3';
+      
+      html += `
+        <div class="ranking-item">
+          <div class="${badgeClass}">${rank}</div>
+          <div style="flex:1;">
+            <div style="font-weight:600;font-size:16px;color:var(--text-primary);">${escapeHtml(user.username || user.display_name || 'Unknown')}</div>
+            <div class="small">Пропусков: ${user.absence_count}</div>
+          </div>
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+  }catch(e){ console.error('loadAbsenceRanking err', e); }
+}
+
 /* ========= INSIGHTS ========= */
 document.getElementById('generateInsightsBtn').addEventListener('click', async () => {
   const btn = document.getElementById('generateInsightsBtn');
-  btn.textContent = 'Генерация...';
+  btn.textContent = '⏳ Генерация...';
   btn.disabled = true;
   
   try {
@@ -604,7 +1278,7 @@ document.getElementById('generateInsightsBtn').addEventListener('click', async (
   } catch (e) {
     console.error('Insights generation error', e);
   } finally {
-    btn.textContent = 'Сгенерировать подсказки';
+    btn.textContent = '✨ Сгенерировать подсказки';
     btn.disabled = false;
   }
 });
@@ -645,7 +1319,7 @@ document.getElementById('addWorklogBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('worklogStatus');
   
   if (!userId || !date) {
-    document.getElementById('worklogStatus').textContent = 'Заполни все поля!';
+    statusEl.textContent = 'Заполни все поля!';
     return;
   }
   
@@ -658,6 +1332,7 @@ document.getElementById('addWorklogBtn').addEventListener('click', async () => {
     const data = await res.json();
     
     if (data.ok) {
+      statusEl.textContent = '✅ Запись добавлена!';
       document.getElementById('worklogReason').value = '';
       await loadWorklogs();
     }
@@ -685,19 +1360,19 @@ async function loadWorklogs() {
       
       if (log.status === 'working') {
         badgeClass += 'status-working';
-        statusText = 'Работает';
+        statusText = '✅ Работает';
       } else if (log.status === 'absent') {
         badgeClass += 'status-absent';
-        statusText = 'Не вышел';
+        statusText = '❌ Не вышел';
       } else if (log.status === 'evening') {
         badgeClass += 'status-evening';
-        statusText = 'Вечером';
+        statusText = '🌙 Вечером';
       }
       
       html += `
         <div class="worklog-item">
           <div>
-            <div style="font-weight:600;">${escapeHtml(log.username || 'Unknown')}</div>
+            <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(log.username || 'Unknown')}</div>
             <div class="small muted">${log.date}${log.reason ? ' · ' + escapeHtml(log.reason) : ''}</div>
           </div>
           <span class="${badgeClass}">${statusText}</span>
@@ -718,7 +1393,12 @@ document.getElementById('worklogDate').valueAsDate = new Date();
 let periodicHandle = null;
 async function refreshAll(){
   const state = preserveStateStart();
-  await Promise.all([ loadReports(), loadTeam(), loadGlobalChart() ]);
+  await Promise.all([ 
+    loadReports(), 
+    loadTeam(), 
+    loadGlobalChart(),
+    loadApprovalStats()
+  ]);
   preserveStateEnd(state);
 }
 

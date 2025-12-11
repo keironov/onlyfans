@@ -361,6 +361,7 @@ export function getDetailedStats() {
          users.role,
          COUNT(reports.id) AS total_reports,
          SUM(CASE WHEN reports.status = 'approved' THEN 1 ELSE 0 END) AS approved_reports,
+         SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
          SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
          SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
          SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total
@@ -369,6 +370,99 @@ export function getDetailedStats() {
        GROUP BY users.id
        ORDER BY approved_reports DESC`,
       (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === NEW: APPROVAL/REJECTION STATS ===
+
+export function getApprovalStats() {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS total_approved,
+         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS total_rejected
+       FROM reports`,
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+// === NEW: GROWTH STATISTICS ===
+
+export function getTeamGrowth() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         DATE(created_at / 1000, 'unixepoch') as date,
+         COUNT(*) as count
+       FROM users
+       GROUP BY date
+       ORDER BY date ASC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getConversionGrowth(type) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         DATE(created_at / 1000, 'unixepoch') as date,
+         SUM(number) as total
+       FROM reports
+       WHERE status = 'approved' AND type = ?
+       GROUP BY date
+       ORDER BY date ASC`,
+      [type],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === NEW: ABSENCE RANKING ===
+
+export function getAbsenceRanking() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.display_name,
+         COUNT(work_logs.id) as absence_count
+       FROM users
+       LEFT JOIN work_logs ON work_logs.user_id = users.id AND work_logs.status = 'absent'
+       GROUP BY users.id
+       HAVING absence_count > 0
+       ORDER BY absence_count DESC
+       LIMIT 10`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === NEW: INDIVIDUAL USER DETAILED STATS ===
+
+export function getUserDetailedStats(userId) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         users.id,
+         users.username,
+         users.display_name,
+         users.role,
+         COUNT(reports.id) AS total_reports,
+         SUM(CASE WHEN reports.status = 'approved' THEN 1 ELSE 0 END) AS approved_reports,
+         SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
+         SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
+         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       WHERE users.id = ?
+       GROUP BY users.id`,
+      [userId],
+      (err, row) => (err ? reject(err) : resolve(row))
     );
   });
 }

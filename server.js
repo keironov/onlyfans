@@ -139,13 +139,11 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
-app.get('/api/users/:username/summary', async (req, res) => {
+app.get('/api/users/:id/stats', async (req, res) => {
   try {
-    const user = await db.getUserByUsername(req.params.username);
-    if (!user) return res.json({ ok: false, error: 'User not found' });
-    const summary = await db.summaryForUser(user.id);
-    const reports = await db.listReportsForUser(user.id);
-    res.json({ ok: true, user, summary, reports });
+    const stats = await db.getUserDetailedStats(req.params.id);
+    if (!stats) return res.json({ ok: false, error: 'User not found' });
+    res.json({ ok: true, stats });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -219,6 +217,46 @@ app.get('/api/stats/detailed', async (req, res) => {
   try {
     const stats = await db.getDetailedStats();
     res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/approvals', async (req, res) => {
+  try {
+    const stats = await db.getApprovalStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/team', async (req, res) => {
+  try {
+    const growth = await db.getTeamGrowth();
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/:type', async (req, res) => {
+  try {
+    const type = req.params.type;
+    if (!['happn', 'instagram', 'lid'].includes(type)) {
+      return res.json({ ok: false, error: 'Invalid type' });
+    }
+    const growth = await db.getConversionGrowth(type);
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/absences', async (req, res) => {
+  try {
+    const ranking = await db.getAbsenceRanking();
+    res.json({ ok: true, ranking });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
