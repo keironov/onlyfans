@@ -29,10 +29,6 @@ button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);
 .action-btn{width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;border:none;}
 .approve{background:var(--accent-green);color:#081125;}
 .reject{background:var(--accent-red);color:#fff;}
-#userPickerOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1999;}
-#userPickerModal{display:none;position:fixed;top:18%;left:50%;transform:translateX(-50%);background:var(--card);padding:16px;border-radius:10px;box-shadow:0 0 30px rgba(0,0,0,0.6);width:360px;max-height:65%;overflow-y:auto;z-index:2000;}
-.user-picker-item{padding:10px;cursor:pointer;border-radius:8px;}
-.user-picker-item:hover{background:rgba(255,255,255,0.02);}
 table{width:100%;border-collapse:collapse;color:#e6eef8;}
 th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:left;vertical-align:middle;}
 thead th{color:var(--muted);font-weight:600;font-size:13px;}
@@ -134,7 +130,6 @@ async function fetchJson(url, opts) {
   const res = await fetch(url, opts); 
   return res.json(); 
 }
-
 function escapeHtml(text){ 
   if(!text && text!==0) return ''; 
   return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); 
@@ -147,6 +142,7 @@ const globalSummaryEl = document.getElementById('globalSummary');
 const globalChartCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
 let userChart = null;
+let isRefreshing = false;
 
 /* ====== Preserve scroll/input ====== */
 function preserveStateStart(){
@@ -167,7 +163,6 @@ async function loadTeam(){
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
-
     const existingRows = {};
     teamListEl.querySelectorAll('.user-row').forEach(row=>existingRows[row.dataset.userid]=row);
 
@@ -207,8 +202,6 @@ async function loadTeam(){
       };
       delete existingRows[u.id];
     });
-
-    // удалить лишние
     Object.values(existingRows).forEach(row=>row.remove());
     fillFeedbackUsers(res.users);
   }catch(e){ console.error(e); teamListEl.innerText='Ошибка'; }
@@ -253,7 +246,6 @@ async function loadReports(){
     const res = await fetchJson('/api/reports');
     if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="5">Ошибка загрузки</td></tr>'; preserveStateEnd(state); return; }
     const pendingReports = res.reports.filter(r=>r.status==='pending');
-
     const existingMap = {};
     reportsTable.querySelectorAll('tr[data-report-id]').forEach(tr=>{ existingMap[tr.dataset.reportId] = tr; });
 
@@ -282,7 +274,6 @@ async function loadReports(){
         `;
         reportsTable.appendChild(tr);
       } else {
-        // обновляем текст и значения
         tr.querySelector('.table-username').textContent = escapeHtml(rep.username||'—');
         tr.querySelector('.report-text').textContent = escapeHtml(rep.text);
         tr.querySelector('input').value = rep.number||0;
@@ -290,9 +281,7 @@ async function loadReports(){
       }
       delete existingMap[id];
     });
-
     Object.values(existingMap).forEach(tr=>tr.remove());
-
   }catch(e){ console.error('loadReports err', e); }
   preserveStateEnd(state);
 }
@@ -321,103 +310,19 @@ async function loadGlobalChart(){
   }catch(e){ console.error('loadGlobalChart err', e); globalSummaryEl.innerText='Ошибка'; }
 }
 
-/* ====== User Summary ====== */
-document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
-  const username = document.getElementById('viewUsername').value.trim();
-  if(!username) return;
-  try{
-    const usersRes = await fetchJson('/api/users');
-    if(!usersRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const user = usersRes.users.find(u=>u.username===username);
-    if(!user){ document.getElementById('userSummary').innerText='Не найден'; return; }
-
-    const reportsRes = await fetchJson('/api/reports');
-    if(!reportsRes.ok){ document.getElementById('userSummary').innerText='Ошибка'; return; }
-    const userReports = reportsRes.reports.filter(r=>r.user_id===user.id && r.status==='approved');
-
-    const total = userReports.reduce((acc,r)=>acc+(parseInt(r.number)||0),0);
-    const byType = {happn:0, instagram:0, lid:0};
-    userReports.forEach(r=>{ if(r.type) byType[r.type]+=parseInt(r.number)||0; });
-
-    document.getElementById('userSummary').innerText = `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
-
-    const ctx = document.getElementById('userActivityChart').getContext('2d');
-    const values = [byType.happn, byType.instagram, byType.lid];
-    if(userChart){
-      userChart.data.datasets[0].data = values;
-      userChart.update();
-    } else {
-      userChart = new Chart(ctx,{
-        type:'doughnut',
-        data:{ labels:['Happn','Instagram','Лид'], datasets:[{ data: values, backgroundColor:['#f59e0b','#10b981','#3b82f6'] }] },
-        options:{cutout:'60%', animation:{duration:400}}
-      });
-    }
-  }catch(e){ console.error(e); document.getElementById('userSummary').innerText='Ошибка'; }
-});
-document.getElementById('clearUserBtn').addEventListener('click', ()=>{
-  document.getElementById('viewUsername').value='';
-  document.getElementById('userSummary').innerText='No user selected';
-  if(userChart){ userChart.data.datasets[0].data=[0,0,0]; userChart.update(); }
-});
-
-/* ====== Feedback ====== */
-document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
-  const userId = document.getElementById('feedbackUserSelect').value;
-  const text = document.getElementById('feedbackText').value.trim();
-  const status = document.getElementById('feedbackStatus');
-  if(!userId){ status.textContent="Выбери пользователя!"; return; }
-  if(!text){ status.textContent="Напиши текст фидбэка!"; return; }
-  status.textContent="Отправка…";
-  try{
-    const res = await fetch('/api/feedback/send',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({telegram_id:userId,text})
-    });
-    const data = await res.json();
-    if(data.ok){ status.textContent="Фидбек отправлен!"; document.getElementById('feedbackText').value=""; }
-    else{ status.textContent="Ошибка: "+data.error; }
-  }catch(e){ console.error(e); status.textContent="Ошибка соединения"; }
-});
-
-/* ====== Delegate clicks for reports ====== */
-reportsTable.addEventListener('click', async (e)=>{
-  const tr = e.target.closest('tr[data-report-id]');
-  if(!tr) return;
-  const id = tr.dataset.reportId;
-  const numInput = tr.querySelector('input');
-  const sel = tr.querySelector('select');
-
-  if(e.target.classList.contains('approve')){
-    const num = parseInt(numInput.value)||0;
-    const type = sel.value;
-    try {
-      await fetch(`/api/reports/${id}/approve`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ number:num, type })
-      });
-      tr.remove(); 
-      await loadGlobalChart();
-    } catch(e){ console.error(e); }
-  } else if(e.target.classList.contains('reject')){
-    try {
-      await fetch(`/api/reports/${id}/reject`,{ method:'POST' });
-      tr.remove();
-    } catch(e){ console.error(e); }
-  }
-});
-
 /* ====== Auto-refresh ====== */
-async function refreshAll(){ await Promise.all([loadReports(), loadTeam(), loadGlobalChart()]); }
+async function refreshAll(){
+  if(isRefreshing) return; 
+  isRefreshing = true;
+  await Promise.all([loadReports(), loadTeam(), loadGlobalChart()]);
+  isRefreshing = false;
+}
 document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 document.getElementById('periodSelect').addEventListener('change', loadGlobalChart);
 setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
 
 /* ====== Init ====== */
 (async function init(){ await refreshAll(); })();
-
 </script>
 </body>
 </html>
