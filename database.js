@@ -189,15 +189,23 @@ export function globalSummary() {
   });
 }
 
-// === Обновление статуса отчета с возможностью задать number и type ===
 export function updateReportStatus(id, status, number = 0, type = '') {
   return new Promise((resolve, reject) => {
     db.run(
-      `UPDATE reports SET status = ?, number = ?, type = ? WHERE id = ?`,
+      `UPDATE reports 
+       SET status = ?, number = ?, type = ? 
+       WHERE id = ?`,
       [status, number, type, id],
       function (err) {
         if (err) return reject(err);
-        resolve(true);
+        db.get(
+          `SELECT reports.*, users.username
+           FROM reports
+           LEFT JOIN users ON users.id = reports.user_id
+           WHERE reports.id = ?`,
+          [id],
+          (e, row) => (e ? reject(e) : resolve(row))
+        );
       }
     );
   });
