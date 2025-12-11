@@ -146,6 +146,7 @@ const teamListEl = document.getElementById('teamList');
 const globalSummaryEl = document.getElementById('globalSummary');
 const globalChartCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
+let userChart = null;
 
 /* ====== Preserve scroll/input ====== */
 function preserveStateStart(){
@@ -166,37 +167,49 @@ async function loadTeam(){
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ teamListEl.innerText='Ошибка'; return; }
-    teamListEl.innerHTML = '';
+
+    const existingRows = {};
+    teamListEl.querySelectorAll('.user-row').forEach(row=>existingRows[row.dataset.userid]=row);
+
     res.users.forEach(u=>{
-      const div = document.createElement('div');
-      div.className='user-row';
-      div.dataset.userid = u.id;
       const uname = u.username || ('id:'+u.id);
-      div.innerHTML = `
-        <span style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</span>
-        <select class="table-select">
-          <option value="">Выбрать роль</option>
-          <option value="worker" ${u.role==='worker'?'selected':''}>Работник</option>
-          <option value="cleaner" ${u.role==='cleaner'?'selected':''}>Уборщик</option>
-          <option value="accountant" ${u.role==='accountant'?'selected':''}>Бухгалтер</option>
-        </select>
-        <button class="secondary deleteUserBtn">Удалить</button>
-      `;
-      div.querySelector('select').addEventListener('change', async ()=>{
+      let div = existingRows[u.id];
+      if(!div){
+        div = document.createElement('div');
+        div.className='user-row';
+        div.dataset.userid = u.id;
+        div.innerHTML = `
+          <span style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</span>
+          <select class="table-select">
+            <option value="">Выбрать роль</option>
+            <option value="worker">Работник</option>
+            <option value="cleaner">Уборщик</option>
+            <option value="accountant">Бухгалтер</option>
+          </select>
+          <button class="secondary deleteUserBtn">Удалить</button>
+        `;
+        teamListEl.appendChild(div);
+      }
+      const sel = div.querySelector('select');
+      sel.value = u.role || '';
+      div.querySelector('.deleteUserBtn').onclick = async ()=>{
+        if(!confirm(`Удалить пользователя ${uname}?`)) return;
+        try{ await fetch(`/api/users/${u.id}/delete`,{method:'POST'}); loadTeam(); }catch(e){console.error(e);}
+      };
+      sel.onchange = async ()=>{
         try{ 
           await fetch(`/api/users/${u.id}/role`,{
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({role:div.querySelector('select').value})
+            body:JSON.stringify({role:sel.value})
           }); 
         } catch(e){console.error(e);}
-      });
-      div.querySelector('.deleteUserBtn').addEventListener('click', async ()=>{
-        if(!confirm(`Удалить пользователя ${uname}?`)) return;
-        try{ await fetch(`/api/users/${u.id}/delete`,{method:'POST'}); loadTeam(); }catch(e){console.error(e);}
-      });
-      teamListEl.appendChild(div);
+      };
+      delete existingRows[u.id];
     });
+
+    // удалить лишние
+    Object.values(existingRows).forEach(row=>row.remove());
     fillFeedbackUsers(res.users);
   }catch(e){ console.error(e); teamListEl.innerText='Ошибка'; }
 }
@@ -254,7 +267,7 @@ async function loadReports(){
         tr.innerHTML = `
           <td class="table-username">${escapeHtml(rep.username||'—')}</td>
           <td class="report-text">${escapeHtml(rep.text)}</td>
-          <td><input type="number" value="0" style="width:72px" /></td>
+          <td><input type="number" value="${rep.number||0}" style="width:72px" /></td>
           <td>
             <select class="table-select">
               <option value="happn">Happn</option>
@@ -268,26 +281,18 @@ async function loadReports(){
           </td>
         `;
         reportsTable.appendChild(tr);
-
-        const numInput = tr.querySelector('input');
-        const sel = tr.querySelector('select');
-        tr.querySelector('.approve').addEventListener('click', async ()=>{
-          const num = parseInt(numInput.value)||0;
-          const type = sel.value;
-          try { await fetch(`/api/reports/${id}/approve`,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({ number:num, type })
-          }); tr.remove(); await loadGlobalChart(); } catch(e){ console.error(e); }
-        });
-        tr.querySelector('.reject').addEventListener('click', async ()=>{
-          try { await fetch(`/api/reports/${id}/reject`,{ method:'POST' }); tr.remove(); } catch(e){ console.error(e); }
-        });
+      } else {
+        // обновляем текст и значения
+        tr.querySelector('.table-username').textContent = escapeHtml(rep.username||'—');
+        tr.querySelector('.report-text').textContent = escapeHtml(rep.text);
+        tr.querySelector('input').value = rep.number||0;
+        tr.querySelector('select').value = rep.type || 'happn';
       }
       delete existingMap[id];
     });
 
-    Object.keys(existingMap).forEach(oldId=>{ const tr = existingMap[oldId]; if(tr) tr.remove(); });
+    Object.values(existingMap).forEach(tr=>tr.remove());
+
   }catch(e){ console.error('loadReports err', e); }
   preserveStateEnd(state);
 }
@@ -335,14 +340,14 @@ document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
     userReports.forEach(r=>{ if(r.type) byType[r.type]+=parseInt(r.number)||0; });
 
     document.getElementById('userSummary').innerText = `Всего: ${total} · Happn: ${byType.happn} · Instagram: ${byType.instagram} · Лид: ${byType.lid}`;
-    
+
     const ctx = document.getElementById('userActivityChart').getContext('2d');
     const values = [byType.happn, byType.instagram, byType.lid];
-    if(window.userChart){
-      window.userChart.data.datasets[0].data = values;
-      window.userChart.update();
+    if(userChart){
+      userChart.data.datasets[0].data = values;
+      userChart.update();
     } else {
-      window.userChart = new Chart(ctx,{
+      userChart = new Chart(ctx,{
         type:'doughnut',
         data:{ labels:['Happn','Instagram','Лид'], datasets:[{ data: values, backgroundColor:['#f59e0b','#10b981','#3b82f6'] }] },
         options:{cutout:'60%', animation:{duration:400}}
@@ -353,7 +358,7 @@ document.getElementById('viewUserBtn').addEventListener('click', async ()=>{
 document.getElementById('clearUserBtn').addEventListener('click', ()=>{
   document.getElementById('viewUsername').value='';
   document.getElementById('userSummary').innerText='No user selected';
-  if(window.userChart){ window.userChart.data.datasets[0].data=[0,0,0]; window.userChart.update(); }
+  if(userChart){ userChart.data.datasets[0].data=[0,0,0]; userChart.update(); }
 });
 
 /* ====== Feedback ====== */
@@ -376,11 +381,39 @@ document.getElementById('sendFeedbackBtn').addEventListener('click', async ()=>{
   }catch(e){ console.error(e); status.textContent="Ошибка соединения"; }
 });
 
+/* ====== Delegate clicks for reports ====== */
+reportsTable.addEventListener('click', async (e)=>{
+  const tr = e.target.closest('tr[data-report-id]');
+  if(!tr) return;
+  const id = tr.dataset.reportId;
+  const numInput = tr.querySelector('input');
+  const sel = tr.querySelector('select');
+
+  if(e.target.classList.contains('approve')){
+    const num = parseInt(numInput.value)||0;
+    const type = sel.value;
+    try {
+      await fetch(`/api/reports/${id}/approve`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ number:num, type })
+      });
+      tr.remove(); 
+      await loadGlobalChart();
+    } catch(e){ console.error(e); }
+  } else if(e.target.classList.contains('reject')){
+    try {
+      await fetch(`/api/reports/${id}/reject`,{ method:'POST' });
+      tr.remove();
+    } catch(e){ console.error(e); }
+  }
+});
+
 /* ====== Auto-refresh ====== */
 async function refreshAll(){ await Promise.all([loadReports(), loadTeam(), loadGlobalChart()]); }
 document.getElementById('refreshBtn').addEventListener('click', refreshAll);
 document.getElementById('periodSelect').addEventListener('change', loadGlobalChart);
-let periodicHandle = setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
+setInterval(async ()=>{ if(document.hidden) return; await refreshAll(); }, 3000);
 
 /* ====== Init ====== */
 (async function init(){ await refreshAll(); })();
