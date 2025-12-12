@@ -267,7 +267,6 @@ tbody tr:hover{
 }
 
 canvas{max-width:100%;border-radius:16px;}
-
 .tabs{
   display:flex;
   gap:12px;
@@ -302,6 +301,14 @@ canvas{max-width:100%;border-radius:16px;}
 
 .tab-content{display:none;}
 
+/* --- фиксированные маленькие, стабильные контейнеры статистики --- */
+.stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .stat-card{
   background:rgba(255,255,255,0.03);
   border-radius:16px;
@@ -309,6 +316,12 @@ canvas{max-width:100%;border-radius:16px;}
   border:1px solid var(--glass-border);
   transition:all 0.3s ease;
   text-align:center;
+
+  width:160px;        /* фиксируем */
+  min-height:110px;   /* фиксируем */
+  flex-shrink:0;
+  flex-grow:0;
+  overflow:hidden;
 }
 
 .stat-card:hover{
@@ -356,6 +369,7 @@ canvas{max-width:100%;border-radius:16px;}
   overflow:auto;
   padding:8px;
 }
+
 
 .team-list::-webkit-scrollbar{width:8px;}
 .team-list::-webkit-scrollbar-track{background:rgba(255,255,255,0.02);border-radius:8px;}
