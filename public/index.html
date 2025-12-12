@@ -3,26 +3,489 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Team Dashboard - Enhanced Analytics</title>
+<title>Team Dashboard - Enhanced v2</title>
 <link rel="icon" href="https://public-frontend-cos.metadl.com/mgx/img/favicon.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<link rel="stylesheet" href="styles.css">
+<style>
+:root{
+  --bg-primary:#0a0e1a;
+  --bg-secondary:#0f1419;
+  --glass-bg:rgba(255,255,255,0.03);
+  --glass-border:rgba(255,255,255,0.08);
+  --text-primary:#e8f0ff;
+  --text-secondary:#8b92a8;
+  --accent:#f59e0b;
+  --accent-hover:#fbbf24;
+  --accent-green:#10b981;
+  --accent-red:#ef4444;
+  --accent-blue:#3b82f6;
+  --accent-purple:#a855f7;
+  --shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+
+*{box-sizing:border-box;margin:0;padding:0;}
+
+html,body{
+  height:100%;
+  background:radial-gradient(ellipse at top, #1a1f35 0%, var(--bg-primary) 50%);
+  color:var(--text-primary);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  overflow-x:hidden;
+}
+
+body::before{
+  content:'';
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(245,158,11,0.08) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(59,130,246,0.06) 0%, transparent 50%);
+  pointer-events:none;
+  z-index:0;
+}
+
+.wrap{
+  max-width:1600px;
+  margin:0 auto;
+  padding:24px;
+  position:relative;
+  z-index:1;
+}
+
+.top{
+  display:flex;
+  gap:16px;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:24px;
+  padding:24px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:24px;
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow);
+}
+
+.top h1{
+  font-size:32px;
+  font-weight:700;
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+
+.muted{color:var(--text-secondary);font-size:14px;}
+.small{font-size:13px;color:var(--text-secondary);}
+
+.card{
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:24px;
+  padding:24px;
+  border:1px solid var(--glass-border);
+  box-shadow:var(--shadow);
+  margin-bottom:20px;
+  transition:all 0.3s ease;
+}
+
+.card:hover{
+  border-color:rgba(245,158,11,0.2);
+  box-shadow:0 12px 48px rgba(0,0,0,0.5);
+  transform:translateY(-2px);
+}
+
+.card h3{
+  font-size:20px;
+  font-weight:600;
+  margin-bottom:16px;
+  color:var(--text-primary);
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:20px;
+}
+
+.grid-3{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:20px;
+}
+
+.grid-4{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:16px;
+}
+
+input,textarea,select{
+  width:100%;
+  padding:12px 16px;
+  border-radius:16px;
+  border:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.02);
+  color:var(--text-primary);
+  outline:none;
+  transition:all 0.3s ease;
+  font-size:14px;
+}
+
+input:focus,textarea:focus,select:focus{
+  background:rgba(255,255,255,0.04);
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(245,158,11,0.1);
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92a8' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 12px;
+}
+
+input[type="date"] {
+  position: relative;
+  cursor: pointer;
+}
+
+input[type="number"]{
+  width:90px;
+  text-align:center;
+}
+
+button{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+  border:none;
+  padding:12px 24px;
+  border-radius:16px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:14px;
+  transition:all 0.3s ease;
+  box-shadow:0 4px 16px rgba(245,158,11,0.3);
+}
+
+button:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 24px rgba(245,158,11,0.4);
+}
+
+button:active{
+  transform:translateY(0);
+}
+
+button.secondary{
+  background:rgba(255,255,255,0.05);
+  color:var(--text-primary);
+  border:1px solid var(--glass-border);
+  box-shadow:none;
+}
+
+button.secondary:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:var(--accent);
+}
+
+button.danger{
+  background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
+  color:#fff;
+  box-shadow:0 4px 16px rgba(239,68,68,0.3);
+}
+
+button.small-btn{
+  padding:8px 16px;
+  font-size:12px;
+}
+
+.action-btn{
+  width:40px;
+  height:40px;
+  border-radius:12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  cursor:pointer;
+  border:none;
+  transition:all 0.3s ease;
+}
+
+.approve{
+  background:linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(16,185,129,0.3);
+}
+
+.approve:hover{transform:scale(1.05);}
+
+.reject{
+  background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(239,68,68,0.3);
+}
+
+.reject:hover{transform:scale(1.05);}
+
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0 8px;
+}
+
+th,td{
+  padding:12px 16px;
+  text-align:left;
+  vertical-align:middle;
+}
+
+thead th{
+  color:var(--text-secondary);
+  font-weight:600;
+  font-size:13px;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  border-bottom:1px solid var(--glass-border);
+}
+
+tbody tr{
+  background:rgba(255,255,255,0.02);
+  border-radius:12px;
+  transition:all 0.3s ease;
+}
+
+tbody tr:hover{
+  background:rgba(255,255,255,0.04);
+  transform:translateX(4px);
+}
+
+.table-select{
+  width:160px;
+  padding:8px 12px;
+  border-radius:12px;
+}
+
+canvas{max-width:100%;border-radius:16px;}
+
+.tabs{
+  display:flex;
+  gap:12px;
+  margin-bottom:24px;
+  padding:8px;
+  background:var(--glass-bg);
+  backdrop-filter:blur(20px);
+  border-radius:20px;
+  border:1px solid var(--glass-border);
+  flex-wrap:wrap;
+}
+
+.tab{
+  padding:12px 24px;
+  cursor:pointer;
+  border-radius:14px;
+  transition:all 0.3s ease;
+  font-weight:500;
+  color:var(--text-secondary);
+}
+
+.tab:hover{
+  background:rgba(255,255,255,0.05);
+  color:var(--text-primary);
+}
+
+.tab.active{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+  box-shadow:0 4px 16px rgba(245,158,11,0.3);
+}
+
+.tab-content{display:none;}
+
+.stat-card{
+  background:rgba(255,255,255,0.03);
+  border-radius:16px;
+  padding:20px;
+  border:1px solid var(--glass-border);
+  transition:all 0.3s ease;
+  text-align:center;
+}
+
+.stat-card:hover{
+  background:rgba(255,255,255,0.05);
+  border-color:var(--accent);
+  transform:translateY(-2px);
+}
+
+.stat-number{
+  font-size:32px;
+  font-weight:700;
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  margin-bottom:4px;
+}
+
+.stat-label{
+  font-size:13px;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+
+.user-row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 16px;
+  margin:6px 0;
+  border-radius:12px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--glass-border);
+  transition:all 0.3s ease;
+  gap:12px;
+}
+
+.user-row:hover{
+  background:rgba(255,255,255,0.04);
+  border-color:var(--accent);
+}
+
+.team-list{
+  max-height:500px;
+  overflow:auto;
+  padding:8px;
+}
+
+.team-list::-webkit-scrollbar{width:8px;}
+.team-list::-webkit-scrollbar-track{background:rgba(255,255,255,0.02);border-radius:8px;}
+.team-list::-webkit-scrollbar-thumb{background:var(--accent);border-radius:8px;}
+
+.period-buttons{
+  display:flex;
+  gap:8px;
+  margin-bottom:16px;
+  flex-wrap:wrap;
+}
+
+.period-btn{
+  padding:8px 16px;
+  border-radius:12px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid var(--glass-border);
+  color:var(--text-secondary);
+  cursor:pointer;
+  transition:all 0.3s ease;
+  font-size:13px;
+}
+
+.period-btn:hover{
+  background:rgba(255,255,255,0.08);
+  color:var(--text-primary);
+}
+
+.period-btn.active{
+  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color:#0a0e1a;
+  border-color:var(--accent);
+}
+
+.date-range-picker{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin-top:12px;
+  padding:12px;
+  background:rgba(255,255,255,0.02);
+  border-radius:12px;
+  border:1px solid var(--glass-border);
+}
+
+.progress-bar{
+  width:100%;
+  height:8px;
+  background:rgba(255,255,255,0.05);
+  border-radius:8px;
+  overflow:hidden;
+  position:relative;
+}
+
+.progress-fill{
+  height:100%;
+  background:linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+  border-radius:8px;
+  transition:width 0.5s ease;
+  position:relative;
+}
+
+.progress-fill::after{
+  content:'';
+  position:absolute;
+  top:0;
+  right:0;
+  width:20px;
+  height:100%;
+  background:rgba(255,255,255,0.3);
+  border-radius:8px;
+}
+
+.note-item{
+  padding:12px;
+  margin:8px 0;
+  background:rgba(255,255,255,0.03);
+  border-radius:12px;
+  border:1px solid var(--glass-border);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+}
+
+.note-item:hover{
+  background:rgba(255,255,255,0.05);
+}
+
+.notes-list{
+  max-height:300px;
+  overflow:auto;
+}
+
+@media (max-width:1200px){
+  .grid,.grid-3,.grid-4{grid-template-columns:1fr;}
+  .wrap{padding:16px;}
+}
+
+@keyframes fadeIn{
+  from{opacity:0;transform:translateY(10px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+.card{animation:fadeIn 0.5s ease;}
+</style>
 </head>
 <body>
 <div class="wrap" id="wrap">
   <div class="top">
     <div>
-      <h1>Team Dashboard Enhanced</h1>
-      <div class="muted">OnlyFans Agency Management & Analytics</div>
+      <h1>Team Dashboard Enhanced v2</h1>
+      <div class="muted">OnlyFans Agency Management System</div>
     </div>
   </div>
 
   <div class="tabs">
     <div class="tab active" data-tab="reports">📊 Отчеты</div>
-    <div class="tab" data-tab="stats">📈 Аналитика</div>
-    <div class="tab" data-tab="rankings">🏆 Рейтинги</div>
-    <div class="tab" data-tab="notes">📌 Мои заметки</div>
+    <div class="tab" data-tab="stats">📈 Статистика</div>
     <div class="tab" data-tab="team">👥 Команда</div>
+    <div class="tab" data-tab="insights">💡 Подсказки</div>
     <div class="tab" data-tab="worklog">📝 Блог работы</div>
   </div>
 
@@ -82,36 +545,30 @@
     </div>
   </div>
 
-  <!-- TAB: ANALYTICS -->
+  <!-- TAB: STATISTICS -->
   <div id="tab-stats" class="tab-content">
-    <div class="grid">
-      <div class="card">
-        <h3>📊 Happn аккаунты по дням</h3>
-        <div class="period-buttons">
-          <button class="period-btn" data-period="today">Сегодня</button>
-          <button class="period-btn active" data-period="yesterday">Вчера</button>
-          <button class="period-btn" data-period="week">Неделя</button>
-          <button class="period-btn" data-period="month">Месяц</button>
-          <button class="period-btn" data-period="custom">По дате</button>
-        </div>
-        <div id="customDateRange" class="date-range-picker" style="display:none;">
-          <input type="date" id="statsStartDate" />
-          <span>—</span>
-          <input type="date" id="statsEndDate" />
-          <button class="small-btn" id="applyDateRange">Применить</button>
-        </div>
-        <canvas id="happnChart" style="height:280px;"></canvas>
-      </div>
-
-      <div class="card">
-        <h3>💰 Лиды по дням</h3>
-        <canvas id="leadsChart" style="height:280px;"></canvas>
-      </div>
+    <div class="card">
+      <h3>📈 Рост команды</h3>
+      <div id="teamGrowthProgress"></div>
     </div>
 
     <div class="card">
-      <h3>📈 Сравнительная аналитика</h3>
-      <canvas id="combinedChart" style="height:300px;"></canvas>
+      <h3>📊 Статистика по Happn и Лидам</h3>
+      <div class="period-buttons">
+        <button class="period-btn active" data-period="yesterday">Вчера</button>
+        <button class="period-btn" data-period="week">Неделя</button>
+        <button class="period-btn" data-period="month">Месяц</button>
+        <button class="period-btn" data-period="custom">По дате</button>
+      </div>
+      <div id="customDateRange" class="date-range-picker" style="display:none;">
+        <input type="date" id="statsStartDate" />
+        <span>—</span>
+        <input type="date" id="statsEndDate" />
+        <button class="small-btn" id="applyDateRange">Применить</button>
+      </div>
+      <div style="margin-top:20px;">
+        <canvas id="statsChart" style="height:300px;"></canvas>
+      </div>
     </div>
 
     <div class="card">
@@ -137,76 +594,6 @@
     </div>
   </div>
 
-  <!-- TAB: RANKINGS -->
-  <div id="tab-rankings" class="tab-content">
-    <div class="grid-3">
-      <div class="card ranking-card">
-        <h3>🏆 Топ-5 сегодня</h3>
-        <div id="rankingToday" class="ranking-list">Загрузка...</div>
-      </div>
-      <div class="card ranking-card">
-        <h3>🔥 Топ-5 за неделю</h3>
-        <div id="rankingWeek" class="ranking-list">Загрузка...</div>
-      </div>
-      <div class="card ranking-card">
-        <h3>⭐ Топ-5 за месяц</h3>
-        <div id="rankingMonth" class="ranking-list">Загрузка...</div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>📊 Детальная таблица рейтингов</h3>
-      <div class="period-buttons" style="margin-bottom:16px;">
-        <button class="period-btn active" data-ranking-period="today">Сегодня</button>
-        <button class="period-btn" data-ranking-period="week">Неделя</button>
-        <button class="period-btn" data-ranking-period="month">Месяц</button>
-      </div>
-      <div style="overflow:auto;">
-        <table id="rankingTable">
-          <thead>
-            <tr>
-              <th>Место</th>
-              <th>Пользователь</th>
-              <th>Роль</th>
-              <th>Instagram</th>
-              <th>Happn</th>
-              <th>Лиды</th>
-              <th>Всего</th>
-            </tr>
-          </thead>
-          <tbody id="rankingTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAB: PERSONAL NOTES -->
-  <div id="tab-notes" class="tab-content">
-    <div class="card">
-      <h3>➕ Создать новую заметку</h3>
-      <div style="display:grid;gap:12px;">
-        <input id="noteTitle" placeholder="Заголовок заметки" />
-        <textarea id="noteContent" rows="4" placeholder="Текст заметки"></textarea>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <label style="color:var(--text-secondary);font-size:14px;">Цвет:</label>
-          <div class="color-picker">
-            <div class="color-option" data-color="#f59e0b" style="background:#f59e0b;"></div>
-            <div class="color-option" data-color="#ef4444" style="background:#ef4444;"></div>
-            <div class="color-option" data-color="#10b981" style="background:#10b981;"></div>
-            <div class="color-option" data-color="#3b82f6" style="background:#3b82f6;"></div>
-            <div class="color-option" data-color="#a855f7" style="background:#a855f7;"></div>
-            <div class="color-option" data-color="#ec4899" style="background:#ec4899;"></div>
-          </div>
-          <button id="addNoteBtn" style="margin-left:auto;">💾 Создать</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="notes-board" id="notesBoard">
-      <!-- Notes will be dynamically inserted here -->
-    </div>
-  </div>
-
   <!-- TAB: TEAM -->
   <div id="tab-team" class="tab-content">
     <div class="grid">
@@ -226,10 +613,26 @@
             <option value="">Выбери пользователя…</option>
           </select>
           <textarea id="newNote" rows="3" placeholder="Новая заметка (например: Подключить ИИ на эту инсту)"></textarea>
-          <button id="addNoteBtn2">💾 Добавить заметку</button>
+          <button id="addNoteBtn">💾 Добавить заметку</button>
         </div>
         <div id="notesList" class="notes-list small">Выбери пользователя</div>
       </div>
+    </div>
+  </div>
+
+  <!-- TAB: INSIGHTS -->
+  <div id="tab-insights" class="tab-content">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+        <h3>💡 Умные подсказки</h3>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <select id="insightUserSelect" style="width:200px;">
+            <option value="">Все пользователи</option>
+          </select>
+          <button id="generateInsightsBtn">✨ Сгенерировать подсказки</button>
+        </div>
+      </div>
+      <div id="insightsList" class="small muted">Нажми "Сгенерировать подсказки" для анализа</div>
     </div>
   </div>
 
@@ -250,7 +653,7 @@
           </select>
           <textarea id="worklogReason" rows="3" placeholder="Причина (если не вышел)"></textarea>
           <button id="addWorklogBtn">💾 Добавить запись</button>
-          <div id="worklogStatusMsg" class="small muted"></div>
+          <div id="worklogStatus" class="small muted"></div>
         </div>
       </div>
       <div class="card">
@@ -266,6 +669,1001 @@
   </div>
 </div>
 
-<script src="script.js"></script>
+<script>
+/* ========= Helpers ========= */
+async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
+const reportsTable = document.getElementById('reportsTable');
+let statsChart = null;
+let currentWorklogDate = new Date();
+let isSelectOpen = false;
+
+function escapeHtml(text){
+  if(!text && text!==0) return '';
+  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"'"}[m]));
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDisplayDate(date) {
+  const options = { year: 'numeric', month: 'long', day: 'numeric' };
+  return date.toLocaleDateString('ru-RU', options);
+}
+
+/* ========= Tab Switching ========= */
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    tab.classList.add('active');
+    const tabName = tab.dataset.tab;
+    document.getElementById('tab-' + tabName).style.display = 'block';
+    
+    if(tabName === 'stats'){
+      loadStatistics();
+    } else if(tabName === 'insights'){
+      loadInsights();
+    }
+  });
+});
+
+/* ========= Preserve scroll state ========= */
+let lastRefreshTime = Date.now();
+const REFRESH_COOLDOWN = 3000;
+
+function preserveStateStart(){
+  return {
+    scrollY: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
+    activeElement: document.activeElement
+  };
+}
+
+function preserveStateEnd(state){
+  window.scrollTo({ top: state.scrollY, behavior: 'auto' });
+  if(state.activeElement && document.body.contains(state.activeElement)) {
+    try { state.activeElement.focus({ preventScroll: true }); } catch(e) {}
+  }
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    isSelectOpen = true;
+  }
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    isSelectOpen = false;
+  }
+});
+
+document.addEventListener('blur', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    setTimeout(() => { isSelectOpen = false; }, 100);
+  }
+}, true);
+
+/* ========= REPORTS ========= */
+async function loadReports(){
+  if (isSelectOpen) return;
+  
+  const state = preserveStateStart();
+  try{
+    const res = await fetchJson('/api/reports');
+    if(!res.ok){ reportsTable.innerHTML='<tr><td colspan="7">Ошибка загрузки</td></tr>'; preserveStateEnd(state); return; }
+    const pendingReports = res.reports.filter(r=>r.status==='pending');
+
+    const existingMap = {};
+    reportsTable.querySelectorAll('tr[data-report-id]').forEach(tr=>{
+      existingMap[tr.dataset.reportId] = tr;
+    });
+
+    pendingReports.forEach(rep=>{
+      const id = String(rep.id);
+      let tr = existingMap[id];
+      if(!tr){
+        tr = document.createElement('tr');
+        tr.className = 'pending-row';
+        tr.dataset.reportId = id;
+        tr.innerHTML = `
+          <td class="table-username">${escapeHtml(rep.username||'—')}</td>
+          <td class="table-instagram">${escapeHtml(rep.instagram_username||'—')}</td>
+          <td class="report-text" style="white-space:normal;word-break:break-word">${escapeHtml(rep.text)}</td>
+          <td><input type="number" class="happn-input" value="0" style="width:70px" min="0" /></td>
+          <td><input type="number" class="leads-input" value="0" style="width:70px" min="0" /></td>
+          <td><input type="date" class="date-input" value="${rep.report_date||formatDate(new Date())}" style="width:140px" /></td>
+          <td>
+            <button class="action-btn approve">✔</button>
+            <button class="action-btn reject" style="margin-left:8px">✖</button>
+          </td>
+        `;
+        reportsTable.appendChild(tr);
+
+        const happnInput = tr.querySelector('.happn-input');
+        const leadsInput = tr.querySelector('.leads-input');
+        const dateInput = tr.querySelector('.date-input');
+        
+        tr.querySelector('.approve').addEventListener('click', async ()=>{
+          const happn = parseInt(happnInput.value)||0;
+          const leads = parseInt(leadsInput.value)||0;
+          const date = dateInput.value;
+          try {
+            await fetch(`/api/reports/${id}/approve`,{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ happn_accounts: happn, leads_converted: leads, report_date: date })
+            });
+            tr.remove();
+            await loadGlobalStats();
+          } catch(e){ console.error(e); }
+        });
+        
+        tr.querySelector('.reject').addEventListener('click', async ()=>{
+          try {
+            await fetch(`/api/reports/${id}/reject`,{ method:'POST' });
+            tr.remove();
+          } catch(e){ console.error(e); }
+        });
+      }
+      delete existingMap[id];
+    });
+
+    Object.keys(existingMap).forEach(oldId=>{
+      const tr = existingMap[oldId];
+      if(tr) tr.remove();
+    });
+
+  }catch(e){ console.error('loadReports err', e); }
+  preserveStateEnd(state);
+}
+
+/* ========= GLOBAL STATS ========= */
+async function loadGlobalStats(){
+  try{
+    const res = await fetchJson('/api/stats/global');
+    if(!res.ok) return;
+    
+    document.getElementById('totalHappn').textContent = res.data.happn || 0;
+    document.getElementById('totalLeads').textContent = res.data.leads || 0;
+    document.getElementById('totalUsers').textContent = res.data.users || 0;
+    
+    const approvalRes = await fetchJson('/api/stats/approvals');
+    if(approvalRes.ok){
+      const approved = approvalRes.stats.total_approved || 0;
+      const rejected = approvalRes.stats.total_rejected || 0;
+      const total = approved + rejected;
+      const rate = total > 0 ? Math.round((approved / total) * 100) : 0;
+      document.getElementById('approvalRate').textContent = rate + '%';
+    }
+  }catch(e){ console.error('loadGlobalStats err', e); }
+}
+
+/* ========= FEEDBACK ========= */
+document.getElementById('sendFeedbackBtn').addEventListener('click', async () => {
+  const userId = document.getElementById('feedbackUserSelect').value;
+  const text = document.getElementById('feedbackText').value.trim();
+  const status = document.getElementById('feedbackStatus');
+
+  if (!userId) { status.textContent = "Выбери пользователя!"; return; }
+  if (!text) { status.textContent = "Напиши текст фидбэка!"; return; }
+  status.textContent = "Отправка…";
+
+  try {
+    const res = await fetch('/api/feedback/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram_id: userId, text })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = "✅ Фидбек отправлен!";
+      document.getElementById('feedbackText').value = "";
+    } else {
+      status.textContent = "❌ Ошибка: " + data.error;
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = "❌ Ошибка соединения";
+  }
+});
+
+/* ========= TEAM MANAGEMENT ========= */
+async function loadTeam(){
+  if (isSelectOpen) return;
+  
+  try{
+    const res = await fetchJson('/api/users');
+    if(!res.ok){ document.getElementById('teamList').innerText='Ошибка'; return; }
+    
+    const teamList = document.getElementById('teamList');
+    teamList.innerHTML = '';
+    
+    res.users.forEach(u=>{
+      const div = document.createElement('div');
+      div.className='user-row';
+      div.dataset.userId = u.id;
+      const uname = u.username || ('id:'+u.id);
+      div.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</div>
+          <div class="small">Instagram: ${escapeHtml(u.instagram_username||'—')}</div>
+        </div>
+        <input type="text" class="instagram-input" placeholder="@instagram" value="${escapeHtml(u.instagram_username||'')}" style="width:140px;" data-user-id="${u.id}" />
+        <select class="table-select role-select" data-user-id="${u.id}">
+          <option value="">Выбрать роль</option>
+          <option value="Трафер" ${u.role==='Трафер'?'selected':''}>Трафер</option>
+          <option value="Новичок Трафер" ${u.role==='Новичок Трафер'?'selected':''}>Новичок Трафер</option>
+          <option value="Тим Лид" ${u.role==='Тим Лид'?'selected':''}>Тим Лид</option>
+          <option value="⭐️ Раф" ${u.role==='⭐️ Раф'?'selected':''}>⭐️ Раф</option>
+        </select>
+        <button class="action-btn reject delete-user" data-user-id="${u.id}" title="Удалить">✖</button>
+      `;
+      teamList.appendChild(div);
+    });
+
+    // Instagram update handlers
+    teamList.querySelectorAll('.instagram-input').forEach(input => {
+      input.addEventListener('blur', async (e) => {
+        const userId = e.target.dataset.userId;
+        const instagram = e.target.value.trim();
+        try {
+          await fetch(`/api/users/${userId}/instagram`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instagram })
+          });
+        } catch (err) {
+          console.error('Instagram update error', err);
+        }
+      });
+    });
+
+    // Role change handlers
+    teamList.querySelectorAll('.role-select').forEach(sel => {
+      sel.addEventListener('change', async (e) => {
+        const userId = e.target.dataset.userId;
+        const role = e.target.value;
+        try {
+          await fetch(`/api/users/${userId}/role`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role })
+          });
+        } catch (err) {
+          console.error('Role update error', err);
+        }
+      });
+    });
+
+    // Delete handlers
+    teamList.querySelectorAll('.delete-user').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const userId = e.target.dataset.userId;
+        if (!confirm('Удалить этого пользователя?')) return;
+        try {
+          await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+          await loadTeam();
+        } catch (err) {
+          console.error('Delete error', err);
+        }
+      });
+    });
+
+    // Fill selects
+    fillFeedbackUsers(res.users);
+    fillWorklogUsers(res.users);
+    fillInsightUsers(res.users);
+    fillNotesUsers(res.users);
+    fillUserStatsSelect(res.users);
+    
+  }catch(e){ console.error(e); document.getElementById('teamList').innerText='Ошибка'; }
+}
+
+document.getElementById('addUserBtn').addEventListener('click', async () => {
+  const username = document.getElementById('newUsername').value.trim();
+  const status = document.getElementById('addUserStatus');
+  
+  if (!username) {
+    status.textContent = 'Введи username!';
+    return;
+  }
+  
+  status.textContent = 'Добавление...';
+  
+  try {
+    const res = await fetch('/api/users/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json();
+    
+    if (data.ok) {
+      status.textContent = '✅ Пользователь добавлен!';
+      document.getElementById('newUsername').value = '';
+      await loadTeam();
+    } else {
+      status.textContent = '❌ Ошибка: ' + data.error;
+    }
+  } catch (e) {
+    console.error(e);
+    status.textContent = '❌ Ошибка соединения';
+  }
+});
+
+function fillFeedbackUsers(users){
+  const sel = document.getElementById('feedbackUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.telegram_id || '';
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+function fillWorklogUsers(users){
+  const sel = document.getElementById('worklogUser');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.id;
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+function fillInsightUsers(users){
+  const sel = document.getElementById('insightUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Все пользователи</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.id;
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+function fillNotesUsers(users){
+  const sel = document.getElementById('notesUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Выбери пользователя…</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.id;
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+function fillUserStatsSelect(users){
+  const sel = document.getElementById('userStatsSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Все пользователи</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.id;
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
+/* ========= MANAGER NOTES ========= */
+document.getElementById('notesUserSelect').addEventListener('change', async (e) => {
+  const userId = e.target.value;
+  if(!userId){
+    document.getElementById('notesList').innerHTML = 'Выбери пользователя';
+    return;
+  }
+  await loadNotes(userId);
+});
+
+document.getElementById('addNoteBtn').addEventListener('click', async () => {
+  const userId = document.getElementById('notesUserSelect').value;
+  const note = document.getElementById('newNote').value.trim();
+  
+  if(!userId || !note){
+    alert('Выбери пользователя и введи заметку!');
+    return;
+  }
+  
+  try{
+    const res = await fetch('/api/notes/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, note })
+    });
+    const data = await res.json();
+    if(data.ok){
+      document.getElementById('newNote').value = '';
+      await loadNotes(userId);
+    }
+  }catch(e){
+    console.error('Add note error', e);
+  }
+});
+
+async function loadNotes(userId){
+  try{
+    const res = await fetchJson(`/api/notes/${userId}`);
+    if(!res.ok) return;
+    
+    const list = document.getElementById('notesList');
+    if(res.notes.length === 0){
+      list.innerHTML = '<div class="small muted">Нет заметок</div>';
+      return;
+    }
+    
+    list.innerHTML = '';
+    res.notes.forEach(note => {
+      const div = document.createElement('div');
+      div.className = 'note-item';
+      div.innerHTML = `
+        <div style="flex:1;">${escapeHtml(note.note)}</div>
+        <button class="action-btn reject" data-note-id="${note.id}">✖</button>
+      `;
+      list.appendChild(div);
+      
+      div.querySelector('.reject').addEventListener('click', async () => {
+        try{
+          await fetch(`/api/notes/${note.id}`, { method: 'DELETE' });
+          await loadNotes(userId);
+        }catch(e){
+          console.error('Delete note error', e);
+        }
+      });
+    });
+  }catch(e){
+    console.error('Load notes error', e);
+  }
+}
+
+/* ========= STATISTICS ========= */
+async function loadStatistics(){
+  await loadTeamGrowth();
+  await loadStatsChart('yesterday');
+  await loadUserDetailedStats();
+}
+
+async function loadTeamGrowth(){
+  try{
+    const res = await fetchJson('/api/stats/growth/team');
+    if(!res.ok) return;
+    
+    const container = document.getElementById('teamGrowthProgress');
+    
+    // Calculate cumulative
+    const cumulative = [];
+    let sum = 0;
+    res.growth.forEach(g => {
+      sum += g.count;
+      cumulative.push({ date: g.date, count: sum });
+    });
+    
+    if(cumulative.length === 0){
+      container.innerHTML = '<div class="small muted">Нет данных</div>';
+      return;
+    }
+    
+    const maxCount = Math.max(...cumulative.map(c => c.count));
+    
+    let html = '<div style="display:grid;gap:12px;">';
+    cumulative.forEach((item, index) => {
+      const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+      const isGrowth = index > 0 && item.count > cumulative[index-1].count;
+      
+      html += `
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span class="small">${item.date}</span>
+            <span class="small" style="color:var(--accent);font-weight:600;">${item.count} ${isGrowth ? '📈' : ''}</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${percentage}%"></div>
+          </div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    
+    container.innerHTML = html;
+  }catch(e){ console.error('loadTeamGrowth err', e); }
+}
+
+// Period buttons for stats chart
+document.querySelectorAll('.period-buttons .period-btn').forEach(btn => {
+  if(!btn.dataset.userPeriod){
+    btn.addEventListener('click', async (e) => {
+      document.querySelectorAll('.period-buttons .period-btn').forEach(b => {
+        if(!b.dataset.userPeriod) b.classList.remove('active');
+      });
+      e.target.classList.add('active');
+      
+      const period = e.target.dataset.period;
+      if(period === 'custom'){
+        document.getElementById('customDateRange').style.display = 'flex';
+      } else {
+        document.getElementById('customDateRange').style.display = 'none';
+        await loadStatsChart(period);
+      }
+    });
+  }
+});
+
+document.getElementById('applyDateRange').addEventListener('click', async () => {
+  const startDate = document.getElementById('statsStartDate').value;
+  const endDate = document.getElementById('statsEndDate').value;
+  
+  if(!startDate || !endDate){
+    alert('Выбери обе даты!');
+    return;
+  }
+  
+  await loadStatsChart('custom', startDate, endDate);
+});
+
+async function loadStatsChart(period, startDate = null, endDate = null){
+  try{
+    let start, end;
+    const today = new Date();
+    
+    if(period === 'custom' && startDate && endDate){
+      start = startDate;
+      end = endDate;
+    } else if(period === 'yesterday'){
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      start = end = formatDate(yesterday);
+    } else if(period === 'week'){
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      start = formatDate(weekAgo);
+      end = formatDate(today);
+    } else if(period === 'month'){
+      const monthAgo = new Date(today);
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      start = formatDate(monthAgo);
+      end = formatDate(today);
+    }
+    
+    const [happnRes, leadsRes] = await Promise.all([
+      fetchJson(`/api/stats/growth/happn?startDate=${start}&endDate=${end}`),
+      fetchJson(`/api/stats/growth/leads?startDate=${start}&endDate=${end}`)
+    ]);
+    
+    if(!happnRes.ok || !leadsRes.ok) return;
+    
+    const allDates = new Set();
+    happnRes.growth.forEach(g => allDates.add(g.date));
+    leadsRes.growth.forEach(g => allDates.add(g.date));
+    
+    const labels = Array.from(allDates).sort();
+    
+    const happnData = labels.map(date => {
+      const found = happnRes.growth.find(g => g.date === date);
+      return found ? found.total : 0;
+    });
+    
+    const leadsData = labels.map(date => {
+      const found = leadsRes.growth.find(g => g.date === date);
+      return found ? found.total : 0;
+    });
+    
+    const ctx = document.getElementById('statsChart').getContext('2d');
+    if(statsChart){
+      statsChart.data.labels = labels;
+      statsChart.data.datasets[0].data = happnData;
+      statsChart.data.datasets[1].data = leadsData;
+      statsChart.update();
+    } else {
+      statsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Happn аккаунты',
+              data: happnData,
+              backgroundColor: 'rgba(245,158,11,0.8)',
+              borderColor: '#f59e0b',
+              borderWidth: 2,
+              borderRadius: 8
+            },
+            {
+              label: 'Лиды',
+              data: leadsData,
+              backgroundColor: 'rgba(16,185,129,0.8)',
+              borderColor: '#10b981',
+              borderWidth: 2,
+              borderRadius: 8
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              labels: {color: '#8b92a8', font: {size: 12}}
+            }
+          },
+          scales: {
+            x: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            },
+            y: {
+              ticks: {
+                color: '#8b92a8',
+                stepSize: 1
+              },
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            }
+          }
+        }
+      });
+    }
+  }catch(e){ console.error('loadStatsChart err', e); }
+}
+
+// User stats filtering
+document.querySelectorAll('[data-user-period]').forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    document.querySelectorAll('[data-user-period]').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    
+    const period = e.target.dataset.userPeriod;
+    if(period === 'custom'){
+      document.getElementById('userCustomDateRange').style.display = 'flex';
+    } else {
+      document.getElementById('userCustomDateRange').style.display = 'none';
+      await loadUserDetailedStats(period);
+    }
+  });
+});
+
+document.getElementById('userStatsSelect').addEventListener('change', async () => {
+  const activePeriod = document.querySelector('[data-user-period].active');
+  const period = activePeriod ? activePeriod.dataset.userPeriod : 'all';
+  await loadUserDetailedStats(period);
+});
+
+document.getElementById('applyUserDateRange').addEventListener('click', async () => {
+  const startDate = document.getElementById('userStatsStartDate').value;
+  const endDate = document.getElementById('userStatsEndDate').value;
+  
+  if(!startDate || !endDate){
+    alert('Выбери обе даты!');
+    return;
+  }
+  
+  await loadUserDetailedStats('custom', startDate, endDate);
+});
+
+async function loadUserDetailedStats(period = 'all', startDate = null, endDate = null){
+  try{
+    const userId = document.getElementById('userStatsSelect').value;
+    
+    let start, end;
+    const today = new Date();
+    
+    if(period === 'custom' && startDate && endDate){
+      start = startDate;
+      end = endDate;
+    } else if(period === 'week'){
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      start = formatDate(weekAgo);
+      end = formatDate(today);
+    } else if(period === 'month'){
+      const monthAgo = new Date(today);
+      monthAgo.setDate(monthAgo.getDate() - 30);
+      start = formatDate(monthAgo);
+      end = formatDate(today);
+    }
+    
+    let url = '/api/stats/detailed';
+    if(start && end){
+      url = `/api/stats/by-date?startDate=${start}&endDate=${end}`;
+    }
+    
+    const res = await fetchJson(url);
+    if(!res.ok) return;
+    
+    let stats = res.stats;
+    
+    // Filter by user if selected
+    if(userId){
+      stats = stats.filter(s => s.id === parseInt(userId));
+    }
+    
+    const container = document.getElementById('userDetailedStats');
+    
+    if(stats.length === 0){
+      container.innerHTML = '<div class="small muted">Нет данных</div>';
+      return;
+    }
+    
+    // Sort by total
+    stats.sort((a, b) => {
+      const totalA = (a.happn_total || 0) + (a.leads_total || 0);
+      const totalB = (b.happn_total || 0) + (b.leads_total || 0);
+      return totalB - totalA;
+    });
+    
+    let html = '';
+    stats.forEach((user, index) => {
+      const happn = user.happn_total || 0;
+      const leads = user.leads_total || 0;
+      const total = happn + leads;
+      
+      const isTopPerformer = index < 3 && total > 20;
+      const topBadge = isTopPerformer ? `<span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:12px;font-size:12px;font-weight:600;background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);color:#0a0e1a;margin-left:8px;">🏆 Топ-${index + 1}</span>` : '';
+      
+      // Role-based requirements
+      let requirementText = '';
+      if(user.role === 'Трафер'){
+        const status = leads >= 10 ? '✅' : '⚠️';
+        requirementText = `${status} Норма: 10 лидов (текущее: ${leads})`;
+      } else if(user.role === 'Новичок Трафер'){
+        const dailyAvg = period === 'week' ? (happn / 7).toFixed(1) : (happn / 30).toFixed(1);
+        const status = dailyAvg >= 5 ? '✅' : '⚠️';
+        requirementText = `${status} Норма: 5 аккаунтов/день (средн: ${dailyAvg})`;
+      } else if(user.role === 'Тим Лид' || user.role === '⭐️ Раф'){
+        requirementText = '✨ Нет обязательств';
+      }
+      
+      html += `
+        <div style="padding:20px;background:rgba(255,255,255,0.03);border-radius:16px;border:1px solid var(--glass-border);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div>
+              <div style="font-weight:600;font-size:18px;color:var(--accent);margin-bottom:4px;">
+                ${escapeHtml(user.username || 'Unknown')}${topBadge}
+              </div>
+              <div class="small">Роль: ${user.role || 'Не назначена'} · Instagram: ${escapeHtml(user.instagram_username || '—')}</div>
+              ${requirementText ? `<div class="small" style="margin-top:4px;">${requirementText}</div>` : ''}
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:24px;font-weight:700;color:var(--accent);">${total}</div>
+              <div class="small">всего</div>
+            </div>
+          </div>
+          
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+            <div class="stat-card">
+              <div style="font-size:20px;font-weight:700;color:#f59e0b;">${happn}</div>
+              <div class="stat-label">Happn аккаунты</div>
+            </div>
+            <div class="stat-card">
+              <div style="font-size:20px;font-weight:700;color:#10b981;">${leads}</div>
+              <div class="stat-label">Лиды</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+  }catch(e){ console.error('loadUserDetailedStats err', e); }
+}
+
+/* ========= INSIGHTS ========= */
+document.getElementById('generateInsightsBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('generateInsightsBtn');
+  const userId = document.getElementById('insightUserSelect').value;
+  
+  btn.textContent = '⏳ Генерация...';
+  btn.disabled = true;
+  
+  try {
+    const body = userId ? JSON.stringify({ user_id: userId }) : '{}';
+    const res = await fetch('/api/insights/generate', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body
+    });
+    const data = await res.json();
+    
+    if (data.ok) {
+      await loadInsights();
+    }
+  } catch (e) {
+    console.error('Insights generation error', e);
+  } finally {
+    btn.textContent = '✨ Сгенерировать подсказки';
+    btn.disabled = false;
+  }
+});
+
+async function loadInsights() {
+  try {
+    const res = await fetchJson('/api/insights');
+    if (!res.ok) return;
+    
+    const listEl = document.getElementById('insightsList');
+    
+    if (res.insights.length === 0) {
+      listEl.innerHTML = '<div class="small muted">Нет подсказок. Нажми "Сгенерировать подсказки"</div>';
+      return;
+    }
+    
+    let html = '';
+    res.insights.forEach(insight => {
+      let style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent);background:rgba(245,158,11,0.08);border-radius:12px;';
+      
+      if (insight.category === 'success') {
+        style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent-green);background:rgba(16,185,129,0.08);border-radius:12px;';
+      } else if (insight.category === 'improvement' || insight.category === 'warning') {
+        style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent-red);background:rgba(239,68,68,0.08);border-radius:12px;';
+      }
+      
+      html += `<div style="${style}">${escapeHtml(insight.content)}</div>`;
+    });
+    
+    listEl.innerHTML = html;
+  } catch (e) {
+    console.error('Load insights error', e);
+  }
+}
+
+/* ========= WORK LOG ========= */
+document.getElementById('addWorklogBtn').addEventListener('click', async () => {
+  const userId = document.getElementById('worklogUser').value;
+  const date = document.getElementById('worklogDate').value;
+  const status = document.getElementById('worklogStatus').value;
+  const reason = document.getElementById('worklogReason').value.trim();
+  const statusEl = document.getElementById('worklogStatus');
+  
+  if (!userId || !date) {
+    statusEl.textContent = 'Заполни все поля!';
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/worklogs/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, date, status, reason })
+    });
+    const data = await res.json();
+    
+    if (data.ok) {
+      document.getElementById('worklogStatus').textContent = '✅ Запись добавлена!';
+      document.getElementById('worklogReason').value = '';
+      document.getElementById('worklogUser').value = '';
+      document.getElementById('worklogStatus').value = 'working';
+      await loadWorklogsByDate(currentWorklogDate);
+    }
+  } catch (e) {
+    console.error('Add worklog error', e);
+  }
+});
+
+document.getElementById('worklogDatePicker').addEventListener('change', (e) => {
+  currentWorklogDate = new Date(e.target.value);
+  loadWorklogsByDate(currentWorklogDate);
+});
+
+document.getElementById('prevDayBtn').addEventListener('click', () => {
+  currentWorklogDate.setDate(currentWorklogDate.getDate() - 1);
+  document.getElementById('worklogDatePicker').valueAsDate = currentWorklogDate;
+  loadWorklogsByDate(currentWorklogDate);
+});
+
+document.getElementById('nextDayBtn').addEventListener('click', () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const nextDate = new Date(currentWorklogDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+  nextDate.setHours(0, 0, 0, 0);
+  
+  if (nextDate <= today) {
+    currentWorklogDate = nextDate;
+    document.getElementById('worklogDatePicker').valueAsDate = currentWorklogDate;
+    loadWorklogsByDate(currentWorklogDate);
+  }
+});
+
+async function loadWorklogsByDate(date) {
+  try {
+    const dateStr = formatDate(date);
+    const res = await fetchJson(`/api/worklogs?date=${dateStr}`);
+    if (!res.ok) return;
+    
+    const listEl = document.getElementById('worklogList');
+    
+    if (res.logs.length === 0) {
+      listEl.innerHTML = '<div class="small muted">Нет записей за этот день</div>';
+      return;
+    }
+    
+    let html = '';
+    res.logs.forEach(log => {
+      let badgeClass = 'status-badge ';
+      let statusText = '';
+      let badgeStyle = 'padding:6px 14px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;';
+      
+      if (log.status === 'working') {
+        badgeStyle += 'background:linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);color:#fff;';
+        statusText = '✅ Работает';
+      } else if (log.status === 'absent') {
+        badgeStyle += 'background:linear-gradient(135deg, var(--accent-red) 0%, #dc2626 100%);color:#fff;';
+        statusText = '❌ Не вышел';
+      } else if (log.status === 'evening') {
+        badgeStyle += 'background:linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);color:#0a0e1a;';
+        statusText = '🌙 Вечером';
+      }
+      
+      html += `
+        <div style="padding:16px;margin:8px 0;border-radius:16px;background:rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;border:1px solid var(--glass-border);">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(log.username || 'Unknown')}</div>
+            <div class="small muted">${log.reason ? escapeHtml(log.reason) : '—'}</div>
+          </div>
+          <span style="${badgeStyle}">${statusText}</span>
+        </div>
+      `;
+    });
+    
+    listEl.innerHTML = html;
+  } catch (e) {
+    console.error('Load worklogs error', e);
+  }
+}
+
+// Set today's date as default
+document.getElementById('worklogDate').valueAsDate = new Date();
+document.getElementById('worklogDatePicker').valueAsDate = new Date();
+currentWorklogDate = new Date();
+
+/* ========= AUTO-REFRESH ========= */
+let periodicHandle = null;
+
+async function refreshAll(){
+  if (isSelectOpen) return;
+  
+  const now = Date.now();
+  if (now - lastRefreshTime < REFRESH_COOLDOWN) return;
+  lastRefreshTime = now;
+  
+  const state = preserveStateStart();
+  await Promise.all([ 
+    loadReports(), 
+    loadTeam(), 
+    loadGlobalStats()
+  ]);
+  preserveStateEnd(state);
+}
+
+(async function init(){
+  await refreshAll();
+  await loadInsights();
+  await loadWorklogsByDate(currentWorklogDate);
+  
+  if(periodicHandle) clearInterval(periodicHandle);
+  periodicHandle = setInterval(async ()=>{ 
+    if(document.hidden) return; 
+    await refreshAll(); 
+  }, 3000);
+})();
+
+window.addEventListener('beforeunload', ()=>{ if(periodicHandle) clearInterval(periodicHandle); });
+</script>
 </body>
 </html>

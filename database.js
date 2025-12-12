@@ -45,19 +45,6 @@ export function init() {
       )
     `);
 
-    // Personal notes table (new)
-    db.run(`
-      CREATE TABLE IF NOT EXISTS personal_notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        content TEXT,
-        color TEXT DEFAULT '#f59e0b',
-        completed INTEGER DEFAULT 0,
-        created_at INTEGER,
-        completed_at INTEGER
-      )
-    `);
-
     // Feedback table
     db.run(`
       CREATE TABLE IF NOT EXISTS feedback (
@@ -287,63 +274,6 @@ export function deleteManagerNote(noteId) {
   });
 }
 
-// === PERSONAL NOTES ===
-
-export function addPersonalNote({ title, content, color }) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `INSERT INTO personal_notes (title, content, color, created_at) VALUES (?, ?, ?, ?)`,
-      [title, content, color || '#f59e0b', Date.now()],
-      function (err) {
-        if (err) return reject(err);
-        db.get(`SELECT * FROM personal_notes WHERE id = ?`, [this.lastID], (e, r) =>
-          e ? reject(e) : resolve(r)
-        );
-      }
-    );
-  });
-}
-
-export function listPersonalNotes() {
-  return new Promise((resolve, reject) => {
-    db.all(
-      `SELECT * FROM personal_notes ORDER BY completed ASC, created_at DESC`,
-      (err, rows) => (err ? reject(err) : resolve(rows))
-    );
-  });
-}
-
-export function togglePersonalNote(noteId) {
-  return new Promise((resolve, reject) => {
-    db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (err, row) => {
-      if (err) return reject(err);
-      if (!row) return reject(new Error('Note not found'));
-      
-      const newCompleted = row.completed ? 0 : 1;
-      const completedAt = newCompleted ? Date.now() : null;
-      
-      db.run(
-        `UPDATE personal_notes SET completed = ?, completed_at = ? WHERE id = ?`,
-        [newCompleted, completedAt, noteId],
-        function (err2) {
-          if (err2) return reject(err2);
-          db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (e, r) =>
-            e ? reject(e) : resolve(r)
-          );
-        }
-      );
-    });
-  });
-}
-
-export function deletePersonalNote(noteId) {
-  return new Promise((resolve, reject) => {
-    db.run(`DELETE FROM personal_notes WHERE id = ?`, [noteId], (err) =>
-      err ? reject(err) : resolve({ ok: true })
-    );
-  });
-}
-
 // === FEEDBACK ===
 
 export function addFeedback({ user_id, manager_id, message, created_at }) {
@@ -531,42 +461,15 @@ export function getApprovalStats() {
   });
 }
 
-export function getTopPerformers(period = 'today', limit = 5) {
+export function getTeamGrowth() {
   return new Promise((resolve, reject) => {
-    const today = new Date();
-    let startDate, endDate;
-    
-    if (period === 'today') {
-      startDate = endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    } else if (period === 'week') {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      startDate = `${weekAgo.getFullYear()}-${String(weekAgo.getMonth() + 1).padStart(2, '0')}-${String(weekAgo.getDate()).padStart(2, '0')}`;
-      endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    } else if (period === 'month') {
-      const monthAgo = new Date(today);
-      monthAgo.setDate(monthAgo.getDate() - 30);
-      startDate = `${monthAgo.getFullYear()}-${String(monthAgo.getMonth() + 1).padStart(2, '0')}-${String(monthAgo.getDate()).padStart(2, '0')}`;
-      endDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    }
-    
     db.all(
       `SELECT 
-         users.id,
-         users.username,
-         users.role,
-         users.instagram_username,
-         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
-         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total,
-         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
-          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total_score
+         DATE(created_at / 1000, 'unixepoch') as date,
+         COUNT(*) as count
        FROM users
-       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date >= ? AND reports.report_date <= ?
-       GROUP BY users.id
-       HAVING total_score > 0
-       ORDER BY total_score DESC
-       LIMIT ?`,
-      [startDate, endDate, limit],
+       GROUP BY date
+       ORDER BY date ASC`,
       (err, rows) => (err ? reject(err) : resolve(rows))
     );
   });

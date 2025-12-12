@@ -185,46 +185,6 @@ app.delete('/api/notes/:id', async (req, res) => {
   }
 });
 
-// --- PERSONAL NOTES ---
-
-app.get('/api/personal-notes', async (req, res) => {
-  try {
-    const notes = await db.listPersonalNotes();
-    res.json({ ok: true, notes });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-app.post('/api/personal-notes/add', async (req, res) => {
-  try {
-    const { title, content, color } = req.body;
-    if (!title || !content) return res.json({ ok: false, error: 'Missing fields' });
-    const note = await db.addPersonalNote({ title, content, color });
-    res.json({ ok: true, note });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-app.post('/api/personal-notes/:id/toggle', async (req, res) => {
-  try {
-    const note = await db.togglePersonalNote(req.params.id);
-    res.json({ ok: true, note });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-app.delete('/api/personal-notes/:id', async (req, res) => {
-  try {
-    await db.deletePersonalNote(req.params.id);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
 // --- REPORTS ---
 
 app.get('/api/reports', async (req, res) => {
@@ -330,12 +290,10 @@ app.get('/api/stats/approvals', async (req, res) => {
   }
 });
 
-app.get('/api/stats/top-performers/:period', async (req, res) => {
+app.get('/api/stats/growth/team', async (req, res) => {
   try {
-    const period = req.params.period || 'today';
-    const limit = parseInt(req.query.limit) || 5;
-    const performers = await db.getTopPerformers(period, limit);
-    res.json({ ok: true, performers });
+    const growth = await db.getTeamGrowth();
+    res.json({ ok: true, growth });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
