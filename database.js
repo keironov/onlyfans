@@ -18,7 +18,7 @@ export function init() {
       )
     `);
 
-    // Reports table
+    // Reports table with happn_accounts_created field
     db.run(`
       CREATE TABLE IF NOT EXISTS reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,6 +31,7 @@ export function init() {
         status TEXT DEFAULT 'pending',
         number INTEGER DEFAULT 0,
         type TEXT DEFAULT '',
+        happn_accounts_created INTEGER DEFAULT 0,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -61,13 +62,15 @@ export function init() {
       )
     `);
 
-    // Insights/recommendations table
+    // Insights/recommendations table with user_id
     db.run(`
       CREATE TABLE IF NOT EXISTS insights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         content TEXT,
         category TEXT,
-        created_at INTEGER
+        user_id INTEGER,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
   });
@@ -299,6 +302,20 @@ export function listWorkLogs(limit = 100) {
   });
 }
 
+export function listWorkLogsByDate(date) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT work_logs.*, users.username, users.display_name
+       FROM work_logs
+       LEFT JOIN users ON users.id = work_logs.user_id
+       WHERE work_logs.date = ?
+       ORDER BY work_logs.created_at DESC`,
+      [date],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
 export function getWorkLogForUserDate(user_id, date) {
   return new Promise((resolve, reject) => {
     db.get(
@@ -311,11 +328,11 @@ export function getWorkLogForUserDate(user_id, date) {
 
 // === INSIGHTS ===
 
-export function addInsight({ content, category }) {
+export function addInsight({ content, category, user_id }) {
   return new Promise((resolve, reject) => {
     db.run(
-      `INSERT INTO insights (content, category, created_at) VALUES (?, ?, ?)`,
-      [content, category, Date.now()],
+      `INSERT INTO insights (content, category, user_id, created_at) VALUES (?, ?, ?, ?)`,
+      [content, category, user_id || null, Date.now()],
       function (err) {
         if (err) return reject(err);
         db.get(`SELECT * FROM insights WHERE id = ?`, [this.lastID], (e, r) =>
@@ -329,7 +346,10 @@ export function addInsight({ content, category }) {
 export function listInsights(limit = 50) {
   return new Promise((resolve, reject) => {
     db.all(
-      `SELECT * FROM insights ORDER BY created_at DESC LIMIT ?`,
+      `SELECT insights.*, users.username
+       FROM insights
+       LEFT JOIN users ON users.id = insights.user_id
+       ORDER BY created_at DESC LIMIT ?`,
       [limit],
       (err, rows) => (err ? reject(err) : resolve(rows))
     );
@@ -364,7 +384,8 @@ export function getDetailedStats() {
          SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
          SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
          SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
-         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total
+         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total,
+         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS happn_accounts_created
        FROM users
        LEFT JOIN reports ON reports.user_id = users.id
        GROUP BY users.id
@@ -373,8 +394,6 @@ export function getDetailedStats() {
     );
   });
 }
-
-// === NEW: APPROVAL/REJECTION STATS ===
 
 export function getApprovalStats() {
   return new Promise((resolve, reject) => {
@@ -387,8 +406,6 @@ export function getApprovalStats() {
     );
   });
 }
-
-// === NEW: GROWTH STATISTICS ===
 
 export function getTeamGrowth() {
   return new Promise((resolve, reject) => {
@@ -420,8 +437,6 @@ export function getConversionGrowth(type) {
   });
 }
 
-// === NEW: ABSENCE RANKING ===
-
 export function getAbsenceRanking() {
   return new Promise((resolve, reject) => {
     db.all(
@@ -441,8 +456,6 @@ export function getAbsenceRanking() {
   });
 }
 
-// === NEW: INDIVIDUAL USER DETAILED STATS ===
-
 export function getUserDetailedStats(userId) {
   return new Promise((resolve, reject) => {
     db.get(
@@ -456,13 +469,30 @@ export function getUserDetailedStats(userId) {
          SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
          SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
          SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
-         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total
+         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total,
+         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS happn_accounts_created
        FROM users
        LEFT JOIN reports ON reports.user_id = users.id
        WHERE users.id = ?
        GROUP BY users.id`,
       [userId],
       (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+export function getHappnAccountStats() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.username,
+         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS accounts_last_week,
+         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-1 day') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS accounts_today
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY accounts_last_week DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
     );
   });
 }

@@ -262,6 +262,15 @@ app.get('/api/stats/absences', async (req, res) => {
   }
 });
 
+app.get('/api/stats/happn-accounts', async (req, res) => {
+  try {
+    const stats = await db.getHappnAccountStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // --- FEEDBACK ---
 
 app.post('/api/feedback/send', async (req, res) => {
@@ -285,7 +294,8 @@ app.post('/api/feedback/send', async (req, res) => {
 
 app.get('/api/worklogs', async (req, res) => {
   try {
-    const logs = await db.listWorkLogs();
+    const { date } = req.query;
+    const logs = date ? await db.listWorkLogsByDate(date) : await db.listWorkLogs();
     res.json({ ok: true, logs });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -318,53 +328,108 @@ app.get('/api/insights', async (req, res) => {
 
 app.post('/api/insights/generate', async (req, res) => {
   try {
+    const { user_id } = req.body;
     const stats = await db.getDetailedStats();
     const insights = [];
 
-    // Analyze each user's performance
-    stats.forEach(user => {
-      const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
-      const happnRatio = totalConverted > 0 ? (user.happn_total || 0) / totalConverted : 0;
-      const instagramRatio = totalConverted > 0 ? (user.instagram_total || 0) / totalConverted : 0;
+    if (user_id) {
+      // Generate insights for specific user
+      const user = stats.find(u => u.id === parseInt(user_id));
+      if (user) {
+        const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
+        const happnAccounts = user.happn_accounts_created || 0;
+        const avgPerDay = happnAccounts > 0 ? (happnAccounts / 7).toFixed(1) : 0;
 
-      // Recommendation logic
-      if (happnRatio > 0.7 && totalConverted > 20) {
-        insights.push({
-          content: `${user.username}: Отлично работает с Happn (${Math.round(happnRatio * 100)}%). Рекомендуется увеличить количество аккаунтов Happn.`,
-          category: 'performance'
-        });
+        // Check Happn account creation rate
+        if (happnAccounts < 70) { // Less than 10 per day average
+          insights.push({
+            content: `${user.username}: Создано только ${happnAccounts} аккаунтов Happn за последние 7 дней (средн. ${avgPerDay}/день). Норма 10/день. Рекомендуется поговорить с сотрудником о причинах снижения продуктивности.`,
+            category: 'warning',
+            user_id: user.id
+          });
+        } else if (happnAccounts >= 70 && happnAccounts < 100) {
+          insights.push({
+            content: `${user.username}: Хорошая работа! Создано ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Близко к норме 10/день.`,
+            category: 'success',
+            user_id: user.id
+          });
+        } else if (happnAccounts >= 100) {
+          insights.push({
+            content: `${user.username}: Отличная работа! 🏆 Создано ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Превышает норму! Рекомендуется премия.`,
+            category: 'success',
+            user_id: user.id
+          });
+        }
+
+        // Check conversion rate
+        const conversionRate = happnAccounts > 0 ? ((totalConverted / happnAccounts) * 100).toFixed(1) : 0;
+        if (conversionRate > 15) {
+          insights.push({
+            content: `${user.username}: Отличная конверсия ${conversionRate}%! Высокое качество работы с переводом на Instagram.`,
+            category: 'success',
+            user_id: user.id
+          });
+        } else if (conversionRate < 5 && happnAccounts > 20) {
+          insights.push({
+            content: `${user.username}: Низкая конверсия ${conversionRate}%. Создано ${happnAccounts} аккаунтов, но мало переводов (${totalConverted}). Нужна помощь с техникой перевода на Instagram.`,
+            category: 'improvement',
+            user_id: user.id
+          });
+        }
+
+        // Check Instagram performance
+        const instagramRatio = totalConverted > 0 ? ((user.instagram_total || 0) / totalConverted * 100).toFixed(0) : 0;
+        if (instagramRatio > 60) {
+          insights.push({
+            content: `${user.username}: ${instagramRatio}% конверсий через Instagram. Отлично работает с ИИ-чатботом!`,
+            category: 'performance',
+            user_id: user.id
+          });
+        }
       }
+    } else {
+      // Generate global insights
+      stats.forEach(user => {
+        const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
+        const happnAccounts = user.happn_accounts_created || 0;
+        const avgPerDay = happnAccounts > 0 ? (happnAccounts / 7).toFixed(1) : 0;
 
-      if (instagramRatio > 0.6 && totalConverted > 15) {
-        insights.push({
-          content: `${user.username}: Высокая конверсия через Instagram (${Math.round(instagramRatio * 100)}%). Стоит сфокусироваться на Instagram-аккаунтах.`,
-          category: 'performance'
-        });
-      }
+        // Check Happn account creation rate
+        if (happnAccounts < 70 && happnAccounts > 0) {
+          insights.push({
+            content: `${user.username}: Создано только ${happnAccounts} аккаунтов Happn за неделю (средн. ${avgPerDay}/день). Норма 10/день. Требуется разговор.`,
+            category: 'warning',
+            user_id: user.id
+          });
+        } else if (happnAccounts >= 100) {
+          insights.push({
+            content: `${user.username}: Топ-перформер! 🏆 ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Рекомендуется премия!`,
+            category: 'success',
+            user_id: user.id
+          });
+        }
 
-      if (totalConverted < 5 && user.approved_reports > 5) {
-        insights.push({
-          content: `${user.username}: Много отчетов (${user.approved_reports}), но мало конверсий (${totalConverted}). Возможно, нужна помощь с техникой перевода.`,
-          category: 'improvement'
-        });
-      }
-
-      if (totalConverted > 50) {
-        insights.push({
-          content: `${user.username}: Топ-перформер! ${totalConverted} конверсий. Можно делегировать больше аккаунтов.`,
-          category: 'success'
-        });
-      }
-    });
-
-    // Global insights
-    const totalUsers = stats.length;
-    const activeUsers = stats.filter(u => u.approved_reports > 0).length;
-    if (activeUsers < totalUsers * 0.5) {
-      insights.push({
-        content: `Только ${activeUsers} из ${totalUsers} активны. Рекомендуется провести встречу с неактивными членами команды.`,
-        category: 'team'
+        // Check conversion rate
+        const conversionRate = happnAccounts > 0 ? ((totalConverted / happnAccounts) * 100).toFixed(1) : 0;
+        if (conversionRate < 5 && happnAccounts > 20) {
+          insights.push({
+            content: `${user.username}: Низкая конверсия ${conversionRate}%. Нужна помощь с техникой перевода на Instagram.`,
+            category: 'improvement',
+            user_id: user.id
+          });
+        }
       });
+
+      // Global team insights
+      const totalUsers = stats.length;
+      const activeUsers = stats.filter(u => (u.happn_accounts_created || 0) > 0).length;
+      if (activeUsers < totalUsers * 0.5) {
+        insights.push({
+          content: `Только ${activeUsers} из ${totalUsers} создают аккаунты Happn. Рекомендуется провести встречу с неактивными членами команды.`,
+          category: 'team',
+          user_id: null
+        });
+      }
     }
 
     // Save insights to database

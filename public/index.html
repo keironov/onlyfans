@@ -132,6 +132,51 @@ input:focus,textarea:focus,select:focus{
   box-shadow:0 0 0 3px rgba(245,158,11,0.1);
 }
 
+/* Custom select dropdown styling */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b92a8' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 12px;
+}
+
+/* Custom date input styling */
+input[type="date"] {
+  position: relative;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  background: transparent;
+  bottom: 0;
+  color: transparent;
+  cursor: pointer;
+  height: auto;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: auto;
+}
+
+input[type="date"]::before {
+  content: attr(data-placeholder);
+  width: 100%;
+}
+
+input[type="date"]:focus::before,
+input[type="date"]:valid::before {
+  display: none;
+}
+
 input[type="number"]{
   width:90px;
   text-align:center;
@@ -450,6 +495,70 @@ canvas{max-width:100%;border-radius:16px;}
   font-weight:500;
 }
 
+.date-navigator{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px;
+  background:rgba(255,255,255,0.03);
+  border-radius:16px;
+  border:1px solid var(--glass-border);
+  margin-bottom:16px;
+}
+
+.date-navigator button{
+  padding:8px 16px;
+  min-width:40px;
+}
+
+.date-navigator .current-date{
+  flex:1;
+  text-align:center;
+  font-weight:600;
+  color:var(--accent);
+}
+
+.top-performer-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 12px;
+  border-radius:12px;
+  font-size:12px;
+  font-weight:600;
+  background:linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color:#0a0e1a;
+  margin-left:8px;
+}
+
+.detailed-stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));
+  gap:16px;
+  margin-top:12px;
+}
+
+.mini-stat{
+  padding:12px;
+  background:rgba(255,255,255,0.02);
+  border-radius:12px;
+  border:1px solid var(--glass-border);
+}
+
+.mini-stat-value{
+  font-size:24px;
+  font-weight:700;
+  color:var(--accent);
+  margin-bottom:4px;
+}
+
+.mini-stat-label{
+  font-size:11px;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+
 @media (max-width:1200px){
   .grid,.grid-3{grid-template-columns:1fr;}
   .wrap{padding:16px;}
@@ -470,15 +579,6 @@ canvas{max-width:100%;border-radius:16px;}
       <h1>Team Dashboard Enhanced</h1>
       <div class="muted">OnlyFans Agency Management System</div>
     </div>
-    <div style="display:flex;gap:12px;align-items:center">
-      <select id="periodSelect" class="period-selector" title="Период">
-        <option value="today">Сегодня</option>
-        <option value="yesterday">Вчера</option>
-        <option value="week">Неделя</option>
-        <option value="month">Месяц</option>
-      </select>
-      <button id="refreshBtn" class="secondary">🔄 Обновить</button>
-    </div>
   </div>
 
   <div class="tabs">
@@ -490,9 +590,9 @@ canvas{max-width:100%;border-radius:16px;}
   </div>
 
   <!-- TAB: REPORTS -->
-  <div id="tab-reports" class="tab-content">
+  <div id="tab-reports" class="tab-content" style="display:block;">
     <div class="grid">
-      <div>
+      <div style="grid-column:1/-1;">
         <div class="card">
           <h3>📊 Global Stats</h3>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -518,17 +618,19 @@ canvas{max-width:100%;border-radius:16px;}
             </div>
           </div>
         </div>
+      </div>
 
+      <div style="grid-column:1/-1;">
         <div class="card">
           <h3>📋 Отчеты (ожидающие подтверждения)</h3>
           <div style="overflow:auto;max-height:400px;">
             <table>
               <thead>
                 <tr>
-                  <th style="width:16%">@user</th>
-                  <th style="width:42%">Text</th>
-                  <th style="width:12%">Number</th>
-                  <th style="width:14%">Type</th>
+                  <th style="width:12%">@user</th>
+                  <th style="width:50%">Text</th>
+                  <th style="width:10%">Number</th>
+                  <th style="width:12%">Type</th>
                   <th style="width:16%">✔ / ❌</th>
                 </tr>
               </thead>
@@ -538,7 +640,7 @@ canvas{max-width:100%;border-radius:16px;}
         </div>
       </div>
 
-      <div>
+      <div style="grid-column:1/-1;">
         <div class="card">
           <h3>💬 Отправить фидбек</h3>
           <div style="display:grid;gap:12px">
@@ -557,7 +659,7 @@ canvas{max-width:100%;border-radius:16px;}
   </div>
 
   <!-- TAB: STATISTICS -->
-  <div id="tab-stats" class="tab-content" style="display:none;">
+  <div id="tab-stats" class="tab-content">
     <div class="grid">
       <div class="card">
         <h3>📈 Рост команды</h3>
@@ -581,7 +683,7 @@ canvas{max-width:100%;border-radius:16px;}
   </div>
 
   <!-- TAB: TEAM -->
-  <div id="tab-team" class="tab-content" style="display:none;">
+  <div id="tab-team" class="tab-content">
     <div class="grid">
       <div class="card">
         <h3>👥 Управление командой</h3>
@@ -600,18 +702,23 @@ canvas{max-width:100%;border-radius:16px;}
   </div>
 
   <!-- TAB: INSIGHTS -->
-  <div id="tab-insights" class="tab-content" style="display:none;">
+  <div id="tab-insights" class="tab-content">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
         <h3>💡 Умные подсказки</h3>
-        <button id="generateInsightsBtn">✨ Сгенерировать подсказки</button>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <select id="insightUserSelect" style="width:200px;">
+            <option value="">Все пользователи</option>
+          </select>
+          <button id="generateInsightsBtn">✨ Сгенерировать подсказки</button>
+        </div>
       </div>
       <div id="insightsList" class="small muted">Нажми "Сгенерировать подсказки" для анализа</div>
     </div>
   </div>
 
   <!-- TAB: WORKLOG -->
-  <div id="tab-worklog" class="tab-content" style="display:none;">
+  <div id="tab-worklog" class="tab-content">
     <div class="grid">
       <div class="card">
         <h3>➕ Добавить запись</h3>
@@ -632,6 +739,11 @@ canvas{max-width:100%;border-radius:16px;}
       </div>
       <div class="card">
         <h3>📜 История работы</h3>
+        <div class="date-navigator">
+          <button id="prevDayBtn" class="secondary">◀</button>
+          <div class="current-date" id="currentDate"></div>
+          <button id="nextDayBtn" class="secondary">▶</button>
+        </div>
         <div id="worklogList" style="max-height:500px;overflow:auto;">Загрузка...</div>
       </div>
     </div>
@@ -647,10 +759,24 @@ const globalChartCtx = document.getElementById('globalChart').getContext('2d');
 let globalChart = null;
 let teamGrowthChart = null;
 let conversionGrowthChart = null;
+let currentWorklogDate = new Date();
+let isSelectOpen = false;
 
 function escapeHtml(text){
   if(!text && text!==0) return '';
   return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"'"}[m]));
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatDisplayDate(date) {
+  const options = { year: 'numeric', month: 'long', day: 'numeric' };
+  return date.toLocaleDateString('ru-RU', options);
 }
 
 /* ========= Tab Switching ========= */
@@ -662,14 +788,18 @@ document.querySelectorAll('.tab').forEach(tab => {
     const tabName = tab.dataset.tab;
     document.getElementById('tab-' + tabName).style.display = 'block';
     
-    // Load data when switching to stats tab
     if(tabName === 'stats'){
       loadStatistics();
+    } else if(tabName === 'insights'){
+      loadInsights();
     }
   });
 });
 
-/* ========= Preserve scroll state ========= */
+/* ========= Preserve scroll state and prevent refresh during select interaction ========= */
+let lastRefreshTime = Date.now();
+const REFRESH_COOLDOWN = 3000;
+
 function preserveStateStart(){
   return {
     scrollY: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
@@ -682,6 +812,7 @@ function preserveStateStart(){
     })()
   };
 }
+
 function preserveStateEnd(state){
   window.scrollTo({ top: state.scrollY, behavior: 'auto' });
   if(state.activeElement && document.body.contains(state.activeElement)) {
@@ -689,8 +820,29 @@ function preserveStateEnd(state){
   }
 }
 
+// Track when selects are opened
+document.addEventListener('mousedown', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    isSelectOpen = true;
+  }
+});
+
+document.addEventListener('change', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    isSelectOpen = false;
+  }
+});
+
+document.addEventListener('blur', (e) => {
+  if (e.target.tagName === 'SELECT') {
+    setTimeout(() => { isSelectOpen = false; }, 100);
+  }
+}, true);
+
 /* ========= REPORTS ========= */
 async function loadReports(){
+  if (isSelectOpen) return; // Don't refresh if select is open
+  
   const state = preserveStateStart();
   try{
     const res = await fetchJson('/api/reports');
@@ -774,8 +926,7 @@ async function loadReports(){
 /* ========= GLOBAL CHART ========= */
 async function loadGlobalChart(){
   try{
-    const period = document.getElementById('periodSelect').value;
-    const res = await fetchJson(`/api/stats/global?period=${period}`);
+    const res = await fetchJson(`/api/stats/global?period=today`);
     if(!res.ok){ globalSummaryEl.innerText='Ошибка'; return; }
     const data = res.data || {happn:0,instagram:0,lid:0};
     const total = (data.happn||0)+(data.instagram||0)+(data.lid||0);
@@ -863,6 +1014,8 @@ document.getElementById('sendFeedbackBtn').addEventListener('click', async () =>
 
 /* ========= TEAM MANAGEMENT ========= */
 async function loadTeam(){
+  if (isSelectOpen) return; // Don't refresh if select is open
+  
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ document.getElementById('teamList').innerText='Ошибка'; return; }
@@ -922,6 +1075,7 @@ async function loadTeam(){
     // Fill selects
     fillFeedbackUsers(res.users);
     fillWorklogUsers(res.users);
+    fillInsightUsers(res.users);
     
     // Load team stats
     await loadTeamStats();
@@ -1018,6 +1172,20 @@ function fillWorklogUsers(users){
   if(cur) sel.value = cur;
 }
 
+function fillInsightUsers(users){
+  const sel = document.getElementById('insightUserSelect');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Все пользователи</option>';
+  users.forEach(u=>{
+    const option = document.createElement('option');
+    option.value = u.id;
+    option.textContent = u.username || ('id:'+u.id);
+    sel.appendChild(option);
+  });
+  if(cur) sel.value = cur;
+}
+
 /* ========= STATISTICS ========= */
 async function loadStatistics(){
   await loadTeamGrowth();
@@ -1049,16 +1217,16 @@ async function loadTeamGrowth(){
       teamGrowthChart.update();
     } else {
       teamGrowthChart = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: labels,
           datasets: [{
             label: 'Размер команды',
             data: cumulative,
+            backgroundColor: 'rgba(245,158,11,0.8)',
             borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245,158,11,0.1)',
-            tension: 0.4,
-            fill: true
+            borderWidth: 2,
+            borderRadius: 8
           }]
         },
         options: {
@@ -1074,7 +1242,10 @@ async function loadTeamGrowth(){
               grid: {color: 'rgba(255,255,255,0.05)'}
             },
             y: {
-              ticks: {color: '#8b92a8'},
+              ticks: {
+                color: '#8b92a8',
+                stepSize: 1
+              },
               grid: {color: 'rgba(255,255,255,0.05)'}
             }
           }
@@ -1126,30 +1297,33 @@ async function loadConversionGrowth(){
       conversionGrowthChart.update();
     } else {
       conversionGrowthChart = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: labels,
           datasets: [
             {
               label: 'Happn',
               data: happnData,
+              backgroundColor: 'rgba(245,158,11,0.8)',
               borderColor: '#f59e0b',
-              backgroundColor: 'rgba(245,158,11,0.1)',
-              tension: 0.4
+              borderWidth: 2,
+              borderRadius: 8
             },
             {
               label: 'Instagram',
               data: instaData,
+              backgroundColor: 'rgba(16,185,129,0.8)',
               borderColor: '#10b981',
-              backgroundColor: 'rgba(16,185,129,0.1)',
-              tension: 0.4
+              borderWidth: 2,
+              borderRadius: 8
             },
             {
               label: 'Лид',
               data: lidData,
+              backgroundColor: 'rgba(59,130,246,0.8)',
               borderColor: '#3b82f6',
-              backgroundColor: 'rgba(59,130,246,0.1)',
-              tension: 0.4
+              borderWidth: 2,
+              borderRadius: 8
             }
           ]
         },
@@ -1166,7 +1340,10 @@ async function loadConversionGrowth(){
               grid: {color: 'rgba(255,255,255,0.05)'}
             },
             y: {
-              ticks: {color: '#8b92a8'},
+              ticks: {
+                color: '#8b92a8',
+                stepSize: 1
+              },
               grid: {color: 'rgba(255,255,255,0.05)'}
             }
           }
@@ -1182,17 +1359,34 @@ async function loadUserDetailedStats(){
     if(!res.ok) return;
     
     const container = document.getElementById('userDetailedStats');
+    
+    // Sort by total conversions and find top performers
+    const sortedStats = res.stats.slice().sort((a, b) => {
+      const totalA = (a.happn_total || 0) + (a.instagram_total || 0) + (a.lid_total || 0);
+      const totalB = (b.happn_total || 0) + (b.instagram_total || 0) + (b.lid_total || 0);
+      return totalB - totalA;
+    });
+    
     let html = '';
     
-    res.stats.forEach(user => {
+    sortedStats.forEach((user, index) => {
       const total = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
       const approvalRate = user.total_reports > 0 ? Math.round((user.approved_reports / user.total_reports) * 100) : 0;
+      const happnAccounts = user.happn_accounts_created || 0;
+      const avgPerDay = happnAccounts > 0 ? (happnAccounts / 7).toFixed(1) : 0;
+      const conversionRate = happnAccounts > 0 ? ((total / happnAccounts) * 100).toFixed(1) : 0;
+      
+      // Determine if top performer
+      const isTopPerformer = index < 3 && total > 30;
+      const topBadge = isTopPerformer ? `<span class="top-performer-badge">🏆 Топ-${index + 1}</span>` : '';
       
       html += `
         <div style="padding:20px;background:rgba(255,255,255,0.03);border-radius:16px;border:1px solid var(--glass-border);">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <div>
-              <div style="font-weight:600;font-size:18px;color:var(--accent);margin-bottom:4px;">${escapeHtml(user.username || 'Unknown')}</div>
+              <div style="font-weight:600;font-size:18px;color:var(--accent);margin-bottom:4px;">
+                ${escapeHtml(user.username || 'Unknown')}${topBadge}
+              </div>
               <div class="small">Роль: ${user.role || 'Не назначена'}</div>
             </div>
             <div style="text-align:right;">
@@ -1200,6 +1394,7 @@ async function loadUserDetailedStats(){
               <div class="small">конверсий</div>
             </div>
           </div>
+          
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;">
             <div class="stat-card">
               <div style="font-size:20px;font-weight:700;color:#f59e0b;">${user.happn_total || 0}</div>
@@ -1214,10 +1409,32 @@ async function loadUserDetailedStats(){
               <div class="stat-label">Лид</div>
             </div>
           </div>
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--glass-border);display:flex;justify-content:space-between;">
-            <div class="small">Отчетов: ${user.total_reports || 0}</div>
-            <div class="small">Одобрено: ${user.approved_reports || 0} (${approvalRate}%)</div>
-            <div class="small">Отклонено: ${user.rejected_reports || 0}</div>
+          
+          <div class="detailed-stats-grid">
+            <div class="mini-stat">
+              <div class="mini-stat-value">${happnAccounts}</div>
+              <div class="mini-stat-label">Аккаунтов Happn (7 дней)</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${avgPerDay}</div>
+              <div class="mini-stat-label">Средн. аккаунтов/день</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${conversionRate}%</div>
+              <div class="mini-stat-label">Конверсия</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${user.total_reports || 0}</div>
+              <div class="mini-stat-label">Всего отчетов</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${user.approved_reports || 0}</div>
+              <div class="mini-stat-label">Одобрено</div>
+            </div>
+            <div class="mini-stat">
+              <div class="mini-stat-value">${approvalRate}%</div>
+              <div class="mini-stat-label">Процент одобрения</div>
+            </div>
           </div>
         </div>
       `;
@@ -1235,7 +1452,7 @@ async function loadAbsenceRanking(){
     const container = document.getElementById('absenceRanking');
     
     if(res.ranking.length === 0){
-      container.innerHTML = '<div class="small muted">Нет данных о пропусках</div>';
+      container.innerHTML = '<div class="small muted">Нет данных о пропусках 🎉</div>';
       return;
     }
     
@@ -1265,11 +1482,18 @@ async function loadAbsenceRanking(){
 /* ========= INSIGHTS ========= */
 document.getElementById('generateInsightsBtn').addEventListener('click', async () => {
   const btn = document.getElementById('generateInsightsBtn');
+  const userId = document.getElementById('insightUserSelect').value;
+  
   btn.textContent = '⏳ Генерация...';
   btn.disabled = true;
   
   try {
-    const res = await fetch('/api/insights/generate', { method: 'POST' });
+    const body = userId ? JSON.stringify({ user_id: userId }) : '{}';
+    const res = await fetch('/api/insights/generate', { 
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body
+    });
     const data = await res.json();
     
     if (data.ok) {
@@ -1299,7 +1523,7 @@ async function loadInsights() {
     res.insights.forEach(insight => {
       let className = 'insight-item';
       if (insight.category === 'success') className += ' insight-success';
-      if (insight.category === 'improvement') className += ' insight-warning';
+      if (insight.category === 'improvement' || insight.category === 'warning') className += ' insight-warning';
       
       html += `<div class="${className}">${escapeHtml(insight.content)}</div>`;
     });
@@ -1332,24 +1556,38 @@ document.getElementById('addWorklogBtn').addEventListener('click', async () => {
     const data = await res.json();
     
     if (data.ok) {
-      statusEl.textContent = '✅ Запись добавлена!';
+      document.getElementById('worklogStatus').textContent = '✅ Запись добавлена!';
       document.getElementById('worklogReason').value = '';
-      await loadWorklogs();
+      // Reset the select to allow adding another entry
+      document.getElementById('worklogUser').value = '';
+      document.getElementById('worklogStatus').value = 'working';
+      await loadWorklogsByDate(currentWorklogDate);
     }
   } catch (e) {
     console.error('Add worklog error', e);
   }
 });
 
-async function loadWorklogs() {
+async function loadWorklogsByDate(date) {
   try {
-    const res = await fetchJson('/api/worklogs');
+    const dateStr = formatDate(date);
+    const res = await fetchJson(`/api/worklogs?date=${dateStr}`);
     if (!res.ok) return;
     
     const listEl = document.getElementById('worklogList');
+    document.getElementById('currentDate').textContent = formatDisplayDate(date);
+    
+    // Update navigation buttons
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    document.getElementById('nextDayBtn').disabled = selectedDate >= today;
+    document.getElementById('prevDayBtn').disabled = false;
     
     if (res.logs.length === 0) {
-      listEl.innerHTML = '<div class="small muted">Нет записей</div>';
+      listEl.innerHTML = '<div class="small muted">Нет записей за этот день</div>';
       return;
     }
     
@@ -1373,7 +1611,7 @@ async function loadWorklogs() {
         <div class="worklog-item">
           <div>
             <div style="font-weight:600;margin-bottom:4px;">${escapeHtml(log.username || 'Unknown')}</div>
-            <div class="small muted">${log.date}${log.reason ? ' · ' + escapeHtml(log.reason) : ''}</div>
+            <div class="small muted">${log.reason ? escapeHtml(log.reason) : '—'}</div>
           </div>
           <span class="${badgeClass}">${statusText}</span>
         </div>
@@ -1386,12 +1624,39 @@ async function loadWorklogs() {
   }
 }
 
+// Date navigation
+document.getElementById('prevDayBtn').addEventListener('click', () => {
+  currentWorklogDate.setDate(currentWorklogDate.getDate() - 1);
+  loadWorklogsByDate(currentWorklogDate);
+});
+
+document.getElementById('nextDayBtn').addEventListener('click', () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const nextDate = new Date(currentWorklogDate);
+  nextDate.setDate(nextDate.getDate() + 1);
+  nextDate.setHours(0, 0, 0, 0);
+  
+  if (nextDate <= today) {
+    currentWorklogDate = nextDate;
+    loadWorklogsByDate(currentWorklogDate);
+  }
+});
+
 // Set today's date as default
 document.getElementById('worklogDate').valueAsDate = new Date();
+currentWorklogDate = new Date();
 
 /* ========= AUTO-REFRESH ========= */
 let periodicHandle = null;
+
 async function refreshAll(){
+  if (isSelectOpen) return; // Don't refresh if select is open
+  
+  const now = Date.now();
+  if (now - lastRefreshTime < REFRESH_COOLDOWN) return;
+  lastRefreshTime = now;
+  
   const state = preserveStateStart();
   await Promise.all([ 
     loadReports(), 
@@ -1402,13 +1667,10 @@ async function refreshAll(){
   preserveStateEnd(state);
 }
 
-document.getElementById('refreshBtn').addEventListener('click', refreshAll);
-document.getElementById('periodSelect').addEventListener('change', () => { loadGlobalChart(); });
-
 (async function init(){
   await refreshAll();
   await loadInsights();
-  await loadWorklogs();
+  await loadWorklogsByDate(currentWorklogDate);
   
   if(periodicHandle) clearInterval(periodicHandle);
   periodicHandle = setInterval(async ()=>{ 
