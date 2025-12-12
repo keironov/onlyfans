@@ -410,34 +410,6 @@ canvas{max-width:100%;border-radius:16px;}
   border:1px solid var(--glass-border);
 }
 
-.progress-bar{
-  width:100%;
-  height:8px;
-  background:rgba(255,255,255,0.05);
-  border-radius:8px;
-  overflow:hidden;
-  position:relative;
-}
-
-.progress-fill{
-  height:100%;
-  background:linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
-  border-radius:8px;
-  transition:width 0.5s ease;
-  position:relative;
-}
-
-.progress-fill::after{
-  content:'';
-  position:absolute;
-  top:0;
-  right:0;
-  width:20px;
-  height:100%;
-  background:rgba(255,255,255,0.3);
-  border-radius:8px;
-}
-
 .note-item{
   padding:12px;
   margin:8px 0;
@@ -485,7 +457,6 @@ canvas{max-width:100%;border-radius:16px;}
     <div class="tab active" data-tab="reports">📊 Отчеты</div>
     <div class="tab" data-tab="stats">📈 Статистика</div>
     <div class="tab" data-tab="team">👥 Команда</div>
-    <div class="tab" data-tab="insights">💡 Подсказки</div>
     <div class="tab" data-tab="worklog">📝 Блог работы</div>
   </div>
 
@@ -549,12 +520,13 @@ canvas{max-width:100%;border-radius:16px;}
   <div id="tab-stats" class="tab-content">
     <div class="card">
       <h3>📈 Рост команды</h3>
-      <div id="teamGrowthProgress"></div>
+      <canvas id="teamGrowthChart" style="height:250px;"></canvas>
     </div>
 
     <div class="card">
       <h3>📊 Статистика по Happn и Лидам</h3>
       <div class="period-buttons">
+        <button class="period-btn" data-period="today">Сегодня</button>
         <button class="period-btn active" data-period="yesterday">Вчера</button>
         <button class="period-btn" data-period="week">Неделя</button>
         <button class="period-btn" data-period="month">Месяц</button>
@@ -567,7 +539,7 @@ canvas{max-width:100%;border-radius:16px;}
         <button class="small-btn" id="applyDateRange">Применить</button>
       </div>
       <div style="margin-top:20px;">
-        <canvas id="statsChart" style="height:300px;"></canvas>
+        <canvas id="statsChart" style="height:280px;"></canvas>
       </div>
     </div>
 
@@ -620,22 +592,6 @@ canvas{max-width:100%;border-radius:16px;}
     </div>
   </div>
 
-  <!-- TAB: INSIGHTS -->
-  <div id="tab-insights" class="tab-content">
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-        <h3>💡 Умные подсказки</h3>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <select id="insightUserSelect" style="width:200px;">
-            <option value="">Все пользователи</option>
-          </select>
-          <button id="generateInsightsBtn">✨ Сгенерировать подсказки</button>
-        </div>
-      </div>
-      <div id="insightsList" class="small muted">Нажми "Сгенерировать подсказки" для анализа</div>
-    </div>
-  </div>
-
   <!-- TAB: WORKLOG -->
   <div id="tab-worklog" class="tab-content">
     <div class="grid">
@@ -653,7 +609,7 @@ canvas{max-width:100%;border-radius:16px;}
           </select>
           <textarea id="worklogReason" rows="3" placeholder="Причина (если не вышел)"></textarea>
           <button id="addWorklogBtn">💾 Добавить запись</button>
-          <div id="worklogStatus" class="small muted"></div>
+          <div id="worklogStatusMsg" class="small muted"></div>
         </div>
       </div>
       <div class="card">
@@ -674,8 +630,11 @@ canvas{max-width:100%;border-radius:16px;}
 async function fetchJson(url, opts){ const res = await fetch(url, opts); return res.json(); }
 const reportsTable = document.getElementById('reportsTable');
 let statsChart = null;
+let teamGrowthChart = null;
 let currentWorklogDate = new Date();
 let isSelectOpen = false;
+let isInputFocused = false;
+let pendingInstagramUpdates = {};
 
 function escapeHtml(text){
   if(!text && text!==0) return '';
@@ -705,8 +664,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     
     if(tabName === 'stats'){
       loadStatistics();
-    } else if(tabName === 'insights'){
-      loadInsights();
     }
   });
 });
@@ -747,9 +704,21 @@ document.addEventListener('blur', (e) => {
   }
 }, true);
 
+document.addEventListener('focus', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    isInputFocused = true;
+  }
+}, true);
+
+document.addEventListener('blur', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    setTimeout(() => { isInputFocused = false; }, 100);
+  }
+}, true);
+
 /* ========= REPORTS ========= */
 async function loadReports(){
-  if (isSelectOpen) return;
+  if (isSelectOpen || isInputFocused) return;
   
   const state = preserveStateStart();
   try{
@@ -873,90 +842,102 @@ document.getElementById('sendFeedbackBtn').addEventListener('click', async () =>
 
 /* ========= TEAM MANAGEMENT ========= */
 async function loadTeam(){
-  if (isSelectOpen) return;
+  if (isSelectOpen || isInputFocused) return;
   
   try{
     const res = await fetchJson('/api/users');
     if(!res.ok){ document.getElementById('teamList').innerText='Ошибка'; return; }
     
     const teamList = document.getElementById('teamList');
-    teamList.innerHTML = '';
+    const currentHtml = teamList.innerHTML;
+    
+    let newHtml = '';
     
     res.users.forEach(u=>{
-      const div = document.createElement('div');
-      div.className='user-row';
-      div.dataset.userId = u.id;
       const uname = u.username || ('id:'+u.id);
-      div.innerHTML = `
-        <div style="flex:1;">
-          <div style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</div>
-          <div class="small">Instagram: ${escapeHtml(u.instagram_username||'—')}</div>
+      const instagramValue = pendingInstagramUpdates[u.id] !== undefined ? pendingInstagramUpdates[u.id] : (u.instagram_username || '');
+      
+      newHtml += `
+        <div class="user-row" data-user-id="${u.id}">
+          <div style="flex:1;">
+            <div style="font-weight:600;color:var(--accent);">${escapeHtml(uname)}</div>
+            <div class="small">Instagram: ${escapeHtml(u.instagram_username||'—')}</div>
+          </div>
+          <input type="text" class="instagram-input" placeholder="@instagram" value="${escapeHtml(instagramValue)}" style="width:140px;" data-user-id="${u.id}" />
+          <select class="table-select role-select" data-user-id="${u.id}">
+            <option value="">Выбрать роль</option>
+            <option value="Трафер" ${u.role==='Трафер'?'selected':''}>Трафер</option>
+            <option value="Новичок Трафер" ${u.role==='Новичок Трафер'?'selected':''}>Новичок Трафер</option>
+            <option value="Тим Лид" ${u.role==='Тим Лид'?'selected':''}>Тим Лид</option>
+            <option value="⭐️ Раф" ${u.role==='⭐️ Раф'?'selected':''}>⭐️ Раф</option>
+          </select>
+          <button class="action-btn reject delete-user" data-user-id="${u.id}" title="Удалить">✖</button>
         </div>
-        <input type="text" class="instagram-input" placeholder="@instagram" value="${escapeHtml(u.instagram_username||'')}" style="width:140px;" data-user-id="${u.id}" />
-        <select class="table-select role-select" data-user-id="${u.id}">
-          <option value="">Выбрать роль</option>
-          <option value="Трафер" ${u.role==='Трафер'?'selected':''}>Трафер</option>
-          <option value="Новичок Трафер" ${u.role==='Новичок Трафер'?'selected':''}>Новичок Трафер</option>
-          <option value="Тим Лид" ${u.role==='Тим Лид'?'selected':''}>Тим Лид</option>
-          <option value="⭐️ Раф" ${u.role==='⭐️ Раф'?'selected':''}>⭐️ Раф</option>
-        </select>
-        <button class="action-btn reject delete-user" data-user-id="${u.id}" title="Удалить">✖</button>
       `;
-      teamList.appendChild(div);
     });
-
-    // Instagram update handlers
-    teamList.querySelectorAll('.instagram-input').forEach(input => {
-      input.addEventListener('blur', async (e) => {
-        const userId = e.target.dataset.userId;
-        const instagram = e.target.value.trim();
-        try {
-          await fetch(`/api/users/${userId}/instagram`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instagram })
-          });
-        } catch (err) {
-          console.error('Instagram update error', err);
-        }
+    
+    if(currentHtml !== newHtml){
+      teamList.innerHTML = newHtml;
+      
+      // Instagram update handlers
+      teamList.querySelectorAll('.instagram-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const userId = e.target.dataset.userId;
+          pendingInstagramUpdates[userId] = e.target.value;
+        });
+        
+        input.addEventListener('blur', async (e) => {
+          const userId = e.target.dataset.userId;
+          const instagram = e.target.value.trim();
+          try {
+            await fetch(`/api/users/${userId}/instagram`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ instagram })
+            });
+            delete pendingInstagramUpdates[userId];
+          } catch (err) {
+            console.error('Instagram update error', err);
+          }
+        });
       });
-    });
 
-    // Role change handlers
-    teamList.querySelectorAll('.role-select').forEach(sel => {
-      sel.addEventListener('change', async (e) => {
-        const userId = e.target.dataset.userId;
-        const role = e.target.value;
-        try {
-          await fetch(`/api/users/${userId}/role`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role })
-          });
-        } catch (err) {
-          console.error('Role update error', err);
-        }
+      // Role change handlers
+      teamList.querySelectorAll('.role-select').forEach(sel => {
+        sel.addEventListener('change', async (e) => {
+          const userId = e.target.dataset.userId;
+          const role = e.target.value;
+          try {
+            await fetch(`/api/users/${userId}/role`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role })
+            });
+          } catch (err) {
+            console.error('Role update error', err);
+          }
+        });
       });
-    });
 
-    // Delete handlers
-    teamList.querySelectorAll('.delete-user').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        const userId = e.target.dataset.userId;
-        if (!confirm('Удалить этого пользователя?')) return;
-        try {
-          await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-          await loadTeam();
-        } catch (err) {
-          console.error('Delete error', err);
-        }
+      // Delete handlers
+      teamList.querySelectorAll('.delete-user').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const userId = e.target.dataset.userId;
+          if (!confirm('Удалить этого пользователя?')) return;
+          try {
+            await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+            delete pendingInstagramUpdates[userId];
+            await loadTeam();
+          } catch (err) {
+            console.error('Delete error', err);
+          }
+        });
       });
-    });
+    }
 
     // Fill selects
     fillFeedbackUsers(res.users);
     fillWorklogUsers(res.users);
-    fillInsightUsers(res.users);
     fillNotesUsers(res.users);
     fillUserStatsSelect(res.users);
     
@@ -1014,20 +995,6 @@ function fillWorklogUsers(users){
   if(!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">Выбери пользователя…</option>';
-  users.forEach(u=>{
-    const option = document.createElement('option');
-    option.value = u.id;
-    option.textContent = u.username || ('id:'+u.id);
-    sel.appendChild(option);
-  });
-  if(cur) sel.value = cur;
-}
-
-function fillInsightUsers(users){
-  const sel = document.getElementById('insightUserSelect');
-  if(!sel) return;
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Все пользователи</option>';
   users.forEach(u=>{
     const option = document.createElement('option');
     option.value = u.id;
@@ -1147,8 +1114,6 @@ async function loadTeamGrowth(){
     const res = await fetchJson('/api/stats/growth/team');
     if(!res.ok) return;
     
-    const container = document.getElementById('teamGrowthProgress');
-    
     // Calculate cumulative
     const cumulative = [];
     let sum = 0;
@@ -1157,33 +1122,60 @@ async function loadTeamGrowth(){
       cumulative.push({ date: g.date, count: sum });
     });
     
-    if(cumulative.length === 0){
-      container.innerHTML = '<div class="small muted">Нет данных</div>';
-      return;
+    if(cumulative.length === 0) return;
+    
+    const labels = cumulative.map(c => c.date);
+    const data = cumulative.map(c => c.count);
+    
+    const ctx = document.getElementById('teamGrowthChart').getContext('2d');
+    if(teamGrowthChart){
+      teamGrowthChart.data.labels = labels;
+      teamGrowthChart.data.datasets[0].data = data;
+      teamGrowthChart.update();
+    } else {
+      teamGrowthChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Размер команды',
+            data: data,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#f59e0b',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {color: '#8b92a8', font: {size: 12}}
+            }
+          },
+          scales: {
+            x: {
+              ticks: {color: '#8b92a8'},
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            },
+            y: {
+              ticks: {
+                color: '#8b92a8',
+                stepSize: 1
+              },
+              grid: {color: 'rgba(255,255,255,0.05)'}
+            }
+          }
+        }
+      });
     }
-    
-    const maxCount = Math.max(...cumulative.map(c => c.count));
-    
-    let html = '<div style="display:grid;gap:12px;">';
-    cumulative.forEach((item, index) => {
-      const percentage = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
-      const isGrowth = index > 0 && item.count > cumulative[index-1].count;
-      
-      html += `
-        <div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <span class="small">${item.date}</span>
-            <span class="small" style="color:var(--accent);font-weight:600;">${item.count} ${isGrowth ? '📈' : ''}</span>
-          </div>
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${percentage}%"></div>
-          </div>
-        </div>
-      `;
-    });
-    html += '</div>';
-    
-    container.innerHTML = html;
   }catch(e){ console.error('loadTeamGrowth err', e); }
 }
 
@@ -1227,6 +1219,8 @@ async function loadStatsChart(period, startDate = null, endDate = null){
     if(period === 'custom' && startDate && endDate){
       start = startDate;
       end = endDate;
+    } else if(period === 'today'){
+      start = end = formatDate(today);
     } else if(period === 'yesterday'){
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
@@ -1274,30 +1268,43 @@ async function loadStatsChart(period, startDate = null, endDate = null){
       statsChart.update();
     } else {
       statsChart = new Chart(ctx, {
-        type: 'bar',
+        type: 'line',
         data: {
           labels: labels,
           datasets: [
             {
               label: 'Happn аккаунты',
               data: happnData,
-              backgroundColor: 'rgba(245,158,11,0.8)',
               borderColor: '#f59e0b',
-              borderWidth: 2,
-              borderRadius: 8
+              backgroundColor: 'rgba(245,158,11,0.1)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#f59e0b',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2
             },
             {
               label: 'Лиды',
               data: leadsData,
-              backgroundColor: 'rgba(16,185,129,0.8)',
               borderColor: '#10b981',
-              borderWidth: 2,
-              borderRadius: 8
+              backgroundColor: 'rgba(16,185,129,0.1)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#10b981',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2
             }
           ]
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: {
               labels: {color: '#8b92a8', font: {size: 12}}
@@ -1463,72 +1470,13 @@ async function loadUserDetailedStats(period = 'all', startDate = null, endDate =
   }catch(e){ console.error('loadUserDetailedStats err', e); }
 }
 
-/* ========= INSIGHTS ========= */
-document.getElementById('generateInsightsBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('generateInsightsBtn');
-  const userId = document.getElementById('insightUserSelect').value;
-  
-  btn.textContent = '⏳ Генерация...';
-  btn.disabled = true;
-  
-  try {
-    const body = userId ? JSON.stringify({ user_id: userId }) : '{}';
-    const res = await fetch('/api/insights/generate', { 
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body
-    });
-    const data = await res.json();
-    
-    if (data.ok) {
-      await loadInsights();
-    }
-  } catch (e) {
-    console.error('Insights generation error', e);
-  } finally {
-    btn.textContent = '✨ Сгенерировать подсказки';
-    btn.disabled = false;
-  }
-});
-
-async function loadInsights() {
-  try {
-    const res = await fetchJson('/api/insights');
-    if (!res.ok) return;
-    
-    const listEl = document.getElementById('insightsList');
-    
-    if (res.insights.length === 0) {
-      listEl.innerHTML = '<div class="small muted">Нет подсказок. Нажми "Сгенерировать подсказки"</div>';
-      return;
-    }
-    
-    let html = '';
-    res.insights.forEach(insight => {
-      let style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent);background:rgba(245,158,11,0.08);border-radius:12px;';
-      
-      if (insight.category === 'success') {
-        style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent-green);background:rgba(16,185,129,0.08);border-radius:12px;';
-      } else if (insight.category === 'improvement' || insight.category === 'warning') {
-        style = 'padding:16px;margin:8px 0;border-left:4px solid var(--accent-red);background:rgba(239,68,68,0.08);border-radius:12px;';
-      }
-      
-      html += `<div style="${style}">${escapeHtml(insight.content)}</div>`;
-    });
-    
-    listEl.innerHTML = html;
-  } catch (e) {
-    console.error('Load insights error', e);
-  }
-}
-
 /* ========= WORK LOG ========= */
 document.getElementById('addWorklogBtn').addEventListener('click', async () => {
   const userId = document.getElementById('worklogUser').value;
   const date = document.getElementById('worklogDate').value;
   const status = document.getElementById('worklogStatus').value;
   const reason = document.getElementById('worklogReason').value.trim();
-  const statusEl = document.getElementById('worklogStatus');
+  const statusEl = document.getElementById('worklogStatusMsg');
   
   if (!userId || !date) {
     statusEl.textContent = 'Заполни все поля!';
@@ -1544,10 +1492,10 @@ document.getElementById('addWorklogBtn').addEventListener('click', async () => {
     const data = await res.json();
     
     if (data.ok) {
-      document.getElementById('worklogStatus').textContent = '✅ Запись добавлена!';
+      statusEl.textContent = '✅ Запись добавлена!';
       document.getElementById('worklogReason').value = '';
-      document.getElementById('worklogUser').value = '';
-      document.getElementById('worklogStatus').value = 'working';
+      document.getElementById('worklogUser').selectedIndex = 0;
+      document.getElementById('worklogStatus').selectedIndex = 0;
       await loadWorklogsByDate(currentWorklogDate);
     }
   } catch (e) {
@@ -1595,9 +1543,8 @@ async function loadWorklogsByDate(date) {
     
     let html = '';
     res.logs.forEach(log => {
-      let badgeClass = 'status-badge ';
-      let statusText = '';
       let badgeStyle = 'padding:6px 14px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;';
+      let statusText = '';
       
       if (log.status === 'working') {
         badgeStyle += 'background:linear-gradient(135deg, var(--accent-green) 0%, #059669 100%);color:#fff;';
@@ -1636,7 +1583,7 @@ currentWorklogDate = new Date();
 let periodicHandle = null;
 
 async function refreshAll(){
-  if (isSelectOpen) return;
+  if (isSelectOpen || isInputFocused) return;
   
   const now = Date.now();
   if (now - lastRefreshTime < REFRESH_COOLDOWN) return;
@@ -1653,7 +1600,6 @@ async function refreshAll(){
 
 (async function init(){
   await refreshAll();
-  await loadInsights();
   await loadWorklogsByDate(currentWorklogDate);
   
   if(periodicHandle) clearInterval(periodicHandle);
