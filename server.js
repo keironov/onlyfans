@@ -49,7 +49,6 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       }
     });
 
-    // /start handler
     bot.onText(/\/start/, async (msg) => {
       try {
         const chatId = msg.chat.id;
@@ -62,18 +61,15 @@ if (BOT_TOKEN && WEBHOOK_URL) {
       }
     });
 
-    // catch-all text messages (no command) -> save as pending report
     bot.on('message', async (msg) => {
       try {
         if (!msg.text || msg.text.startsWith('/')) return;
         const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
         const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
 
-        // Get current date in YYYY-MM-DD format
         const now = new Date();
         const reportDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // add pending report
         await db.addReport({
           user_id: user.id,
           text: msg.text,
@@ -81,12 +77,10 @@ if (BOT_TOKEN && WEBHOOK_URL) {
           created_at: Date.now()
         });
 
-        // notify admin (if configured)
         if (BOT_ADMIN_ID) {
           await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый отчет от ${username}: ${msg.text}`);
         }
 
-        // confirm
         await bot.sendMessage(msg.chat.id, 'Ваш отчет получен и ожидает одобрения.');
       } catch (e) {
         console.error('message handler error', e);
@@ -179,6 +173,46 @@ app.post('/api/notes/add', async (req, res) => {
 app.delete('/api/notes/:id', async (req, res) => {
   try {
     await db.deleteManagerNote(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- PERSONAL NOTES (STICKY NOTES) ---
+
+app.get('/api/personal-notes', async (req, res) => {
+  try {
+    const notes = await db.listPersonalNotes();
+    res.json({ ok: true, notes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/personal-notes/add', async (req, res) => {
+  try {
+    const { content, color } = req.body;
+    if (!content) return res.json({ ok: false, error: 'Content required' });
+    const note = await db.addPersonalNote({ content, color: color || 'yellow' });
+    res.json({ ok: true, note });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/personal-notes/:id/toggle', async (req, res) => {
+  try {
+    const note = await db.togglePersonalNote(req.params.id);
+    res.json({ ok: true, note });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/personal-notes/:id', async (req, res) => {
+  try {
+    await db.deletePersonalNote(req.params.id);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -328,6 +362,57 @@ app.get('/api/stats/absences', async (req, res) => {
   }
 });
 
+// --- RANKINGS ---
+
+app.get('/api/stats/ranking', async (req, res) => {
+  try {
+    const { period, date } = req.query;
+    let ranking = [];
+    
+    if (period === 'today' && date) {
+      ranking = await db.getRankingByDate(date);
+    } else if (period === 'week') {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      ranking = await db.getRankingByPeriod(
+        `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+        `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+      );
+    } else if (period === 'month') {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      ranking = await db.getRankingByPeriod(
+        `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+        `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+      );
+    }
+    
+    res.json({ ok: true, ranking: ranking.slice(0, 5) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/top5-trend', async (req, res) => {
+  try {
+    const trend = await db.getTop5Trend();
+    res.json({ ok: true, trend });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/achievements', async (req, res) => {
+  try {
+    const achievements = await db.getAchievements();
+    res.json({ ok: true, achievements });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // --- FEEDBACK ---
 
 app.post('/api/feedback/send', async (req, res) => {
@@ -395,7 +480,6 @@ app.post('/api/insights/generate', async (req, res) => {
         const happnAccounts = user.happn_total || 0;
         const leads = user.leads_total || 0;
         
-        // Role-based insights
         if (user.role === 'Трафер') {
           if (leads < 10) {
             insights.push({
@@ -436,7 +520,6 @@ app.post('/api/insights/generate', async (req, res) => {
         }
       }
     } else {
-      // Global insights
       stats.forEach(user => {
         const happnAccounts = user.happn_total || 0;
         const leads = user.leads_total || 0;
@@ -459,7 +542,6 @@ app.post('/api/insights/generate', async (req, res) => {
       });
     }
 
-    // Save insights
     for (const insight of insights) {
       await db.addInsight(insight);
     }

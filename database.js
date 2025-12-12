@@ -45,6 +45,18 @@ export function init() {
       )
     `);
 
+    // Personal notes table (sticky notes)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS personal_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT,
+        color TEXT DEFAULT 'yellow',
+        completed INTEGER DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
     // Feedback table
     db.run(`
       CREATE TABLE IF NOT EXISTS feedback (
@@ -269,6 +281,62 @@ export function listManagerNotes(userId) {
 export function deleteManagerNote(noteId) {
   return new Promise((resolve, reject) => {
     db.run(`DELETE FROM manager_notes WHERE id = ?`, [noteId], (err) =>
+      err ? reject(err) : resolve({ ok: true })
+    );
+  });
+}
+
+// === PERSONAL NOTES (STICKY NOTES) ===
+
+export function addPersonalNote({ content, color }) {
+  return new Promise((resolve, reject) => {
+    const now = Date.now();
+    db.run(
+      `INSERT INTO personal_notes (content, color, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      [content, color, now, now],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM personal_notes WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listPersonalNotes() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM personal_notes ORDER BY completed ASC, created_at DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function togglePersonalNote(noteId) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (err, row) => {
+      if (err) return reject(err);
+      if (!row) return reject(new Error('Note not found'));
+      
+      const newCompleted = row.completed ? 0 : 1;
+      db.run(
+        `UPDATE personal_notes SET completed = ?, updated_at = ? WHERE id = ?`,
+        [newCompleted, Date.now(), noteId],
+        function (err2) {
+          if (err2) return reject(err2);
+          db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (e, r) =>
+            e ? reject(e) : resolve(r)
+          );
+        }
+      );
+    });
+  });
+}
+
+export function deletePersonalNote(noteId) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM personal_notes WHERE id = ?`, [noteId], (err) =>
       err ? reject(err) : resolve({ ok: true })
     );
   });
@@ -555,6 +623,185 @@ export function getDailyStats(date) {
        ORDER BY happn_accounts DESC`,
       [date],
       (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === RANKINGS ===
+
+export function getRankingByDate(date) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date = ?
+       GROUP BY users.id
+       HAVING total > 0
+       ORDER BY total DESC
+       LIMIT 5`,
+      [date],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getRankingByPeriod(startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id 
+         AND reports.report_date >= ? 
+         AND reports.report_date <= ?
+       GROUP BY users.id
+       HAVING total > 0
+       ORDER BY total DESC
+       LIMIT 5`,
+      [startDate, endDate],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getTop5Trend() {
+  return new Promise((resolve, reject) => {
+    // Get last 7 days
+    const dates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    
+    // Get top 5 users overall
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY total DESC
+       LIMIT 5`,
+      (err, topUsers) => {
+        if (err) return reject(err);
+        
+        const userPromises = topUsers.map(user => {
+          return new Promise((res, rej) => {
+            const dataPromises = dates.map(date => {
+              return new Promise((r, rj) => {
+                db.get(
+                  `SELECT 
+                     (SUM(CASE WHEN status = 'approved' THEN happn_accounts ELSE 0 END) + 
+                      SUM(CASE WHEN status = 'approved' THEN leads_converted ELSE 0 END)) AS total
+                   FROM reports
+                   WHERE user_id = ? AND report_date = ?`,
+                  [user.id, date],
+                  (e, row) => e ? rj(e) : r(row ? row.total || 0 : 0)
+                );
+              });
+            });
+            
+            Promise.all(dataPromises)
+              .then(data => res({ username: user.username, data }))
+              .catch(rej);
+          });
+        });
+        
+        Promise.all(userPromises)
+          .then(users => resolve({ dates, users }))
+          .catch(reject);
+      }
+    );
+  });
+}
+
+export function getAchievements() {
+  return new Promise((resolve, reject) => {
+    const achievements = [];
+    
+    // Get top performer
+    db.get(
+      `SELECT 
+         users.username,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY total DESC
+       LIMIT 1`,
+      (err, topUser) => {
+        if (err) return reject(err);
+        
+        if (topUser && topUser.total > 0) {
+          achievements.push({
+            icon: '🏆',
+            title: 'Топ исполнитель',
+            description: `${topUser.username} лидирует с ${topUser.total} выполненными задачами!`
+          });
+        }
+        
+        // Get most consistent
+        db.get(
+          `SELECT 
+             users.username,
+             COUNT(DISTINCT reports.report_date) AS days_active
+           FROM users
+           LEFT JOIN reports ON reports.user_id = users.id AND reports.status = 'approved'
+           GROUP BY users.id
+           ORDER BY days_active DESC
+           LIMIT 1`,
+          (err2, consistent) => {
+            if (err2) return reject(err2);
+            
+            if (consistent && consistent.days_active > 5) {
+              achievements.push({
+                icon: '🔥',
+                title: 'Самый стабильный',
+                description: `${consistent.username} работал ${consistent.days_active} дней подряд!`
+              });
+            }
+            
+            // Get team total
+            db.get(
+              `SELECT 
+                 (SUM(CASE WHEN status = 'approved' THEN happn_accounts ELSE 0 END) + 
+                  SUM(CASE WHEN status = 'approved' THEN leads_converted ELSE 0 END)) AS team_total
+               FROM reports`,
+              (err3, teamStats) => {
+                if (err3) return reject(err3);
+                
+                if (teamStats && teamStats.team_total > 100) {
+                  achievements.push({
+                    icon: '🎯',
+                    title: 'Командное достижение',
+                    description: `Команда выполнила ${teamStats.team_total} задач вместе!`
+                  });
+                }
+                
+                resolve(achievements);
+              }
+            );
+          }
+        );
+      }
     );
   });
 }
