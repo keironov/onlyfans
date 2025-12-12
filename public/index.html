@@ -1,4 +1,6 @@
-<!doctype html>
+proanalizirui   
+
+index.html:  <!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8" />
@@ -763,12 +765,7 @@ canvas{max-width:100%;border-radius:16px;}
       </div>
     </div>
 
-    <div class="card">
-      <h3>📊 Сравнительная аналитика</h3>
-      <div style="margin-top:20px;">
-        <canvas id="comparisonChart" style="height:300px;"></canvas>
-      </div>
-    </div>
+
 
     <div class="card">
       <h3>👤 Детальная статистика по пользователям</h3>
@@ -935,7 +932,7 @@ let isSelectOpen = false;
 
 function escapeHtml(text){
   if(!text && text!==0) return '';
-  return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":"&#39;"}[m]));
+  return String(text).replace(/[&<>"']/g, m => ({'&':'&','<':'<','>':'>','"':'"',"'":"'"}[m]));
 }
 
 function formatDate(date) {
@@ -2234,3 +2231,1377 @@ window.addEventListener('beforeunload', ()=>{ if(periodicHandle) clearInterval(p
 </script>
 </body>
 </html>
+
+
+
+server.js:    import express from 'express';
+import bodyParser from 'body-parser';
+import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import TelegramBot from 'node-telegram-bot-api';
+import * as db from './database.js';
+
+dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const BOT_ADMIN_ID = process.env.BOT_ADMIN_ID || '';
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const PORT = process.env.PORT || 3000;
+
+db.init();
+
+const app = express();
+app.use(cors());
+app.use(bodyParser.json({ limit: '200kb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use('/', express.static(path.join(__dirname, 'public')));
+
+// --- Telegram bot via webhook ---
+let bot = null;
+if (BOT_TOKEN && WEBHOOK_URL) {
+  try {
+    bot = new TelegramBot(BOT_TOKEN, { webHook: true });
+    const webhookPath = '/tg';
+    const fullWebhookUrl = WEBHOOK_URL.replace(/\/$/, '') + webhookPath;
+
+    (async () => {
+      await bot.setWebHook(fullWebhookUrl);
+      console.log('Telegram webhook set →', fullWebhookUrl);
+    })().catch(err => {
+      console.error('Failed to set webhook:', err?.response?.body || err);
+    });
+
+    app.post(webhookPath, (req, res) => {
+      try {
+        bot.processUpdate(req.body);
+        res.sendStatus(200);
+      } catch (err) {
+        console.error('Bot processUpdate error', err);
+        res.sendStatus(500);
+      }
+    });
+
+    bot.onText(/\/start/, async (msg) => {
+      try {
+        const chatId = msg.chat.id;
+        const username = msg.from.username || null;
+        const display = `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+        await db.ensureUserByTelegram(String(chatId), username, display);
+        await bot.sendMessage(chatId, `Привет, ${display || username || 'User'}! Ты зарегистрирован.`);
+      } catch (e) {
+        console.error('/start handler error', e);
+      }
+    });
+
+    bot.on('message', async (msg) => {
+      try {
+        if (!msg.text || msg.text.startsWith('/')) return;
+        const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
+        const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
+
+        const now = new Date();
+        const reportDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        await db.addReport({
+          user_id: user.id,
+          text: msg.text,
+          report_date: reportDate,
+          created_at: Date.now()
+        });
+
+        if (BOT_ADMIN_ID) {
+          await bot.sendMessage(BOT_ADMIN_ID, `📝 Новый отчет от ${username}: ${msg.text}`);
+        }
+
+        await bot.sendMessage(msg.chat.id, 'Ваш отчет получен и ожидает одобрения.');
+      } catch (e) {
+        console.error('message handler error', e);
+      }
+    });
+
+  } catch (err) {
+    console.error('Telegram init error', err);
+    bot = null;
+  }
+} else {
+  console.warn('BOT_TOKEN or WEBHOOK_URL not set — telegram disabled.');
+}
+
+// === API ENDPOINTS ===
+
+// --- USERS ---
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await db.listUsers();
+    res.json({ ok: true, users });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/users/add', async (req, res) => {
+  try {
+    const { username } = req.body;
+    if (!username) return res.json({ ok: false, error: 'Username required' });
+    const user = await db.addUserByUsername(username);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/users/:id/role', async (req, res) => {
+  try {
+    const { role } = req.body;
+    const user = await db.updateUserRole(req.params.id, role);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/users/:id/instagram', async (req, res) => {
+  try {
+    const { instagram } = req.body;
+    const user = await db.updateUserInstagram(req.params.id, instagram);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    await db.deleteUser(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- MANAGER NOTES ---
+
+app.get('/api/notes/:userId', async (req, res) => {
+  try {
+    const notes = await db.listManagerNotes(req.params.userId);
+    res.json({ ok: true, notes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/notes/add', async (req, res) => {
+  try {
+    const { user_id, note } = req.body;
+    if (!user_id || !note) return res.json({ ok: false, error: 'Missing fields' });
+    const newNote = await db.addManagerNote({ user_id, note });
+    res.json({ ok: true, note: newNote });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/notes/:id', async (req, res) => {
+  try {
+    await db.deleteManagerNote(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- PERSONAL NOTES (STICKY NOTES) ---
+
+app.get('/api/personal-notes', async (req, res) => {
+  try {
+    const notes = await db.listPersonalNotes();
+    res.json({ ok: true, notes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/personal-notes/add', async (req, res) => {
+  try {
+    const { content, color } = req.body;
+    if (!content) return res.json({ ok: false, error: 'Content required' });
+    const note = await db.addPersonalNote({ content, color: color || 'yellow' });
+    res.json({ ok: true, note });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/personal-notes/:id/toggle', async (req, res) => {
+  try {
+    const note = await db.togglePersonalNote(req.params.id);
+    res.json({ ok: true, note });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/personal-notes/:id', async (req, res) => {
+  try {
+    await db.deletePersonalNote(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- REPORTS ---
+
+app.get('/api/reports', async (req, res) => {
+  try {
+    const reports = await db.listReports();
+    res.json({ ok: true, reports });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/reports/:id/approve', async (req, res) => {
+  try {
+    const { happn_accounts = 0, leads_converted = 0, report_date = null } = req.body;
+    await db.updateReportStatus(req.params.id, 'approved', happn_accounts, leads_converted, report_date);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/reports/:id/reject', async (req, res) => {
+  try {
+    await db.updateReportStatus(req.params.id, 'rejected');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- STATISTICS ---
+
+app.get('/api/stats/global', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let stats;
+    if (startDate && endDate) {
+      stats = await db.getStatsByDateRange(startDate, endDate);
+    } else {
+      stats = await db.getDetailedStats();
+    }
+    
+    const totals = {
+      happn: stats.reduce((sum, s) => sum + (s.happn_total || 0), 0),
+      leads: stats.reduce((sum, s) => sum + (s.leads_total || 0), 0),
+      users: stats.length
+    };
+    
+    res.json({ ok: true, data: totals });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/detailed', async (req, res) => {
+  try {
+    const stats = await db.getDetailedStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/by-date', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      return res.json({ ok: false, error: 'startDate and endDate required' });
+    }
+    const stats = await db.getStatsByDateRange(startDate, endDate);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/by-user/:userId', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const stats = await db.getStatsByUser(req.params.userId, startDate, endDate);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/daily/:date', async (req, res) => {
+  try {
+    const stats = await db.getDailyStats(req.params.date);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/approvals', async (req, res) => {
+  try {
+    const stats = await db.getApprovalStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/team', async (req, res) => {
+  try {
+    const growth = await db.getTeamGrowth();
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/happn', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const growth = await db.getHappnGrowth(startDate, endDate);
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/leads', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const growth = await db.getLeadsGrowth(startDate, endDate);
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/absences', async (req, res) => {
+  try {
+    const ranking = await db.getAbsenceRanking();
+    res.json({ ok: true, ranking });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- RANKINGS ---
+
+app.get('/api/stats/ranking', async (req, res) => {
+  try {
+    const { period, date } = req.query;
+    let ranking = [];
+    
+    if (period === 'today' && date) {
+      ranking = await db.getRankingByDate(date);
+    } else if (period === 'week') {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      ranking = await db.getRankingByPeriod(
+        `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+        `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+      );
+    } else if (period === 'month') {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      ranking = await db.getRankingByPeriod(
+        `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`,
+        `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
+      );
+    }
+    
+    res.json({ ok: true, ranking: ranking.slice(0, 5) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/top5-trend', async (req, res) => {
+  try {
+    const trend = await db.getTop5Trend();
+    res.json({ ok: true, trend });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/achievements', async (req, res) => {
+  try {
+    const achievements = await db.getAchievements();
+    res.json({ ok: true, achievements });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- FEEDBACK ---
+
+app.post('/api/feedback/send', async (req, res) => {
+  try {
+    const { telegram_id, text } = req.body;
+    if (!telegram_id) return res.json({ ok: false, error: 'telegram_id missing' });
+    if (!text) return res.json({ ok: false, error: 'text missing' });
+    if (!bot) return res.json({ ok: false, error: 'Bot not active' });
+
+    const message = `📨 *Фидбек от менеджера*\n\n${text}`;
+    await bot.sendMessage(String(telegram_id), message, { parse_mode: 'Markdown' });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('feedback send error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- WORK LOGS ---
+
+app.get('/api/worklogs', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const logs = date ? await db.listWorkLogsByDate(date) : await db.listWorkLogs();
+    res.json({ ok: true, logs });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/worklogs/add', async (req, res) => {
+  try {
+    const { user_id, date, status, reason } = req.body;
+    if (!user_id || !date || !status) {
+      return res.json({ ok: false, error: 'Missing required fields' });
+    }
+    const log = await db.addWorkLog({ user_id, date, status, reason: reason || '' });
+    res.json({ ok: true, log });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// --- INSIGHTS ---
+
+app.get('/api/insights', async (req, res) => {
+  try {
+    const insights = await db.listInsights();
+    res.json({ ok: true, insights });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/insights/generate', async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    const stats = await db.getDetailedStats();
+    const insights = [];
+
+    if (user_id) {
+      const user = stats.find(u => u.id === parseInt(user_id));
+      if (user) {
+        const happnAccounts = user.happn_total || 0;
+        const leads = user.leads_total || 0;
+        
+        if (user.role === 'Трафер') {
+          if (leads < 10) {
+            insights.push({
+              content: `${user.username} (Трафер): Всего ${leads} лидов. Норма 10 лидов. Требуется улучшение.`,
+              category: 'warning',
+              user_id: user.id
+            });
+          } else {
+            insights.push({
+              content: `${user.username} (Трафер): Отлично! ${leads} лидов. Норма выполнена! 🎯`,
+              category: 'success',
+              user_id: user.id
+            });
+          }
+          
+          if (!user.instagram_username) {
+            insights.push({
+              content: `${user.username} (Трафер): ⚠️ Не указан Instagram аккаунт. Обязательно для роли Трафер!`,
+              category: 'warning',
+              user_id: user.id
+            });
+          }
+        } else if (user.role === 'Новичок Трафер') {
+          const dailyAvg = happnAccounts / 7;
+          if (dailyAvg < 5) {
+            insights.push({
+              content: `${user.username} (Новичок): ${happnAccounts} аккаунтов Happn за неделю (средн. ${dailyAvg.toFixed(1)}/день). Норма 5/день.`,
+              category: 'improvement',
+              user_id: user.id
+            });
+          } else {
+            insights.push({
+              content: `${user.username} (Новичок): Хорошая работа! ${happnAccounts} аккаунтов (средн. ${dailyAvg.toFixed(1)}/день). 👍`,
+              category: 'success',
+              user_id: user.id
+            });
+          }
+        }
+      }
+    } else {
+      stats.forEach(user => {
+        const happnAccounts = user.happn_total || 0;
+        const leads = user.leads_total || 0;
+        
+        if (user.role === 'Трафер' && leads < 10) {
+          insights.push({
+            content: `${user.username} (Трафер): ${leads} лидов. Не выполнена норма (10 лидов).`,
+            category: 'warning',
+            user_id: user.id
+          });
+        }
+        
+        if (user.role === 'Новичок Трафер' && happnAccounts < 35) {
+          insights.push({
+            content: `${user.username} (Новичок): ${happnAccounts} аккаунтов за неделю. Норма 5/день (35/неделю).`,
+            category: 'improvement',
+            user_id: user.id
+          });
+        }
+      });
+    }
+
+    for (const insight of insights) {
+      await db.addInsight(insight);
+    }
+
+    res.json({ ok: true, insights });
+  } catch (e) {
+    console.error('insights generation error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// SPA fallback
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/tg')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+
+database.js:   import sqlite3pkg from 'sqlite3';
+const sqlite3 = sqlite3pkg.verbose();
+
+const db = new sqlite3.Database('./database.sqlite');
+
+// === CREATE TABLES ===
+export function init() {
+  db.serialize(() => {
+    // Users table with role field
+    db.run(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        telegram_id TEXT UNIQUE,
+        username TEXT UNIQUE,
+        display_name TEXT,
+        role TEXT DEFAULT '',
+        instagram_username TEXT DEFAULT '',
+        created_at INTEGER DEFAULT 0
+      )
+    `);
+
+    // Reports table with enhanced fields
+    db.run(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        text TEXT,
+        report_date TEXT,
+        created_at INTEGER,
+        status TEXT DEFAULT 'pending',
+        happn_accounts INTEGER DEFAULT 0,
+        leads_converted INTEGER DEFAULT 0,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+
+    // Manager notes table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS manager_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        note TEXT,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+
+    // Personal notes table (sticky notes)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS personal_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT,
+        color TEXT DEFAULT 'yellow',
+        completed INTEGER DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `);
+
+    // Feedback table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        manager_id INTEGER,
+        message TEXT,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(manager_id) REFERENCES users(id)
+      )
+    `);
+
+    // Work log table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS work_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        date TEXT,
+        status TEXT,
+        reason TEXT,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+
+    // Insights table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS insights (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT,
+        category TEXT,
+        user_id INTEGER,
+        created_at INTEGER,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+  });
+}
+
+// === USER MANAGEMENT ===
+
+export function ensureUserByTelegram(telegram_id, username, display) {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT * FROM users WHERE telegram_id = ?`,
+      [telegram_id],
+      (err, row) => {
+        if (err) return reject(err);
+        if (row) return resolve(row);
+
+        db.run(
+          `INSERT INTO users (telegram_id, username, display_name, created_at) VALUES (?, ?, ?, ?)`,
+          [telegram_id, username, display, Date.now()],
+          function (err2) {
+            if (err2) return reject(err2);
+            db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
+              e ? reject(e) : resolve(r)
+            );
+          }
+        );
+      }
+    );
+  });
+}
+
+export function addUserByUsername(username) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO users (username, display_name, created_at) VALUES (?, ?, ?)`,
+      [username, username, Date.now()],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM users WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function updateUserRole(userId, role) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE users SET role = ? WHERE id = ?`,
+      [role, userId],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM users WHERE id = ?`, [userId], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function updateUserInstagram(userId, instagram) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE users SET instagram_username = ? WHERE id = ?`,
+      [instagram, userId],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM users WHERE id = ?`, [userId], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function deleteUser(userId) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM users WHERE id = ?`, [userId], (err) =>
+      err ? reject(err) : resolve({ ok: true })
+    );
+  });
+}
+
+export function getUserByUsername(username) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, row) =>
+      err ? reject(err) : resolve(row)
+    );
+  });
+}
+
+export function listUsers() {
+  return new Promise((resolve, reject) => {
+    db.all(`SELECT * FROM users ORDER BY id DESC`, (err, rows) =>
+      err ? reject(err) : resolve(rows)
+    );
+  });
+}
+
+// === REPORTS ===
+
+export function addReport({ user_id, text, report_date, created_at }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO reports (user_id, text, report_date, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [user_id, text, report_date, created_at],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT reports.*, users.username FROM reports LEFT JOIN users ON users.id = reports.user_id WHERE reports.id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listReports(limit = 1000) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT reports.*, users.username, users.instagram_username
+       FROM reports 
+       LEFT JOIN users ON users.id = reports.user_id
+       ORDER BY reports.id DESC 
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function updateReportStatus(id, status, happn_accounts = 0, leads_converted = 0, report_date = null) {
+  return new Promise((resolve, reject) => {
+    let query = `UPDATE reports SET status = ?, happn_accounts = ?, leads_converted = ?`;
+    let params = [status, happn_accounts, leads_converted];
+    
+    if (report_date) {
+      query += `, report_date = ?`;
+      params.push(report_date);
+    }
+    
+    query += ` WHERE id = ?`;
+    params.push(id);
+    
+    db.run(query, params, function (err) {
+      if (err) return reject(err);
+      db.get(
+        `SELECT reports.*, users.username, users.instagram_username
+         FROM reports
+         LEFT JOIN users ON users.id = reports.user_id
+         WHERE reports.id = ?`,
+        [id],
+        (e, row) => (e ? reject(e) : resolve(row))
+      );
+    });
+  });
+}
+
+// === MANAGER NOTES ===
+
+export function addManagerNote({ user_id, note }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO manager_notes (user_id, note, created_at) VALUES (?, ?, ?)`,
+      [user_id, note, Date.now()],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM manager_notes WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listManagerNotes(userId) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM manager_notes WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function deleteManagerNote(noteId) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM manager_notes WHERE id = ?`, [noteId], (err) =>
+      err ? reject(err) : resolve({ ok: true })
+    );
+  });
+}
+
+// === PERSONAL NOTES (STICKY NOTES) ===
+
+export function addPersonalNote({ content, color }) {
+  return new Promise((resolve, reject) => {
+    const now = Date.now();
+    db.run(
+      `INSERT INTO personal_notes (content, color, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      [content, color, now, now],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM personal_notes WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listPersonalNotes() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT * FROM personal_notes ORDER BY completed ASC, created_at DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function togglePersonalNote(noteId) {
+  return new Promise((resolve, reject) => {
+    db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (err, row) => {
+      if (err) return reject(err);
+      if (!row) return reject(new Error('Note not found'));
+      
+      const newCompleted = row.completed ? 0 : 1;
+      db.run(
+        `UPDATE personal_notes SET completed = ?, updated_at = ? WHERE id = ?`,
+        [newCompleted, Date.now(), noteId],
+        function (err2) {
+          if (err2) return reject(err2);
+          db.get(`SELECT * FROM personal_notes WHERE id = ?`, [noteId], (e, r) =>
+            e ? reject(e) : resolve(r)
+          );
+        }
+      );
+    });
+  });
+}
+
+export function deletePersonalNote(noteId) {
+  return new Promise((resolve, reject) => {
+    db.run(`DELETE FROM personal_notes WHERE id = ?`, [noteId], (err) =>
+      err ? reject(err) : resolve({ ok: true })
+    );
+  });
+}
+
+// === FEEDBACK ===
+
+export function addFeedback({ user_id, manager_id, message, created_at }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO feedback (user_id, manager_id, message, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [user_id, manager_id, message, created_at],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM feedback WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listFeedback() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT feedback.*, u.username AS user_name, m.username AS manager_name
+       FROM feedback
+       LEFT JOIN users u ON u.id = feedback.user_id
+       LEFT JOIN users m ON m.id = feedback.manager_id
+       ORDER BY feedback.id DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === WORK LOGS ===
+
+export function addWorkLog({ user_id, date, status, reason }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO work_logs (user_id, date, status, reason, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [user_id, date, status, reason, Date.now()],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM work_logs WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listWorkLogs(limit = 100) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT work_logs.*, users.username, users.display_name
+       FROM work_logs
+       LEFT JOIN users ON users.id = work_logs.user_id
+       ORDER BY work_logs.date DESC, work_logs.created_at DESC
+       LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function listWorkLogsByDate(date) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT work_logs.*, users.username, users.display_name
+       FROM work_logs
+       LEFT JOIN users ON users.id = work_logs.user_id
+       WHERE work_logs.date = ?
+       ORDER BY work_logs.created_at DESC`,
+      [date],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === INSIGHTS ===
+
+export function addInsight({ content, category, user_id }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO insights (content, category, user_id, created_at) VALUES (?, ?, ?, ?)`,
+      [content, category, user_id || null, Date.now()],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM insights WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listInsights(limit = 50) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT insights.*, users.username
+       FROM insights
+       LEFT JOIN users ON users.id = insights.user_id
+       ORDER BY created_at DESC LIMIT ?`,
+      [limit],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === STATISTICS ===
+
+export function getDetailedStats() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         users.instagram_username,
+         COUNT(reports.id) AS total_reports,
+         SUM(CASE WHEN reports.status = 'approved' THEN 1 ELSE 0 END) AS approved_reports,
+         SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY approved_reports DESC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getStatsByDateRange(startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         users.instagram_username,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date >= ? AND reports.report_date <= ?
+       GROUP BY users.id
+       ORDER BY happn_total DESC`,
+      [startDate, endDate],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getStatsByUser(userId, startDate = null, endDate = null) {
+  return new Promise((resolve, reject) => {
+    let query = `
+      SELECT 
+        reports.report_date,
+        SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_accounts,
+        SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_converted
+      FROM reports
+      WHERE reports.user_id = ?
+    `;
+    
+    let params = [userId];
+    
+    if (startDate && endDate) {
+      query += ` AND reports.report_date >= ? AND reports.report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY reports.report_date ORDER BY reports.report_date DESC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
+  });
+}
+
+export function getApprovalStats() {
+  return new Promise((resolve, reject) => {
+    db.get(
+      `SELECT 
+         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS total_approved,
+         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS total_rejected
+       FROM reports`,
+      (err, row) => (err ? reject(err) : resolve(row))
+    );
+  });
+}
+
+export function getTeamGrowth() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         DATE(created_at / 1000, 'unixepoch') as date,
+         COUNT(*) as count
+       FROM users
+       GROUP BY date
+       ORDER BY date ASC`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getHappnGrowth(startDate = null, endDate = null) {
+  return new Promise((resolve, reject) => {
+    let query = `
+      SELECT 
+        report_date as date,
+        SUM(happn_accounts) as total
+      FROM reports
+      WHERE status = 'approved'
+    `;
+    
+    let params = [];
+    
+    if (startDate && endDate) {
+      query += ` AND report_date >= ? AND report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY report_date ORDER BY report_date ASC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
+  });
+}
+
+export function getLeadsGrowth(startDate = null, endDate = null) {
+  return new Promise((resolve, reject) => {
+    let query = `
+      SELECT 
+        report_date as date,
+        SUM(leads_converted) as total
+      FROM reports
+      WHERE status = 'approved'
+    `;
+    
+    let params = [];
+    
+    if (startDate && endDate) {
+      query += ` AND report_date >= ? AND report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY report_date ORDER BY report_date ASC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
+  });
+}
+
+export function getAbsenceRanking() {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.display_name,
+         COUNT(work_logs.id) as absence_count
+       FROM users
+       LEFT JOIN work_logs ON work_logs.user_id = users.id AND work_logs.status = 'absent'
+       GROUP BY users.id
+       HAVING absence_count > 0
+       ORDER BY absence_count DESC
+       LIMIT 10`,
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getDailyStats(date) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.instagram_username,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_accounts,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_converted
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date = ?
+       GROUP BY users.id
+       ORDER BY happn_accounts DESC`,
+      [date],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+// === RANKINGS ===
+
+export function getRankingByDate(date) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date = ?
+       GROUP BY users.id
+       HAVING total > 0
+       ORDER BY total DESC
+       LIMIT 5`,
+      [date],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getRankingByPeriod(startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id 
+         AND reports.report_date >= ? 
+         AND reports.report_date <= ?
+       GROUP BY users.id
+       HAVING total > 0
+       ORDER BY total DESC
+       LIMIT 5`,
+      [startDate, endDate],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getTop5Trend() {
+  return new Promise((resolve, reject) => {
+    // Get last 7 days
+    const dates = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    }
+    
+    // Get top 5 users overall
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY total DESC
+       LIMIT 5`,
+      (err, topUsers) => {
+        if (err) return reject(err);
+        
+        const userPromises = topUsers.map(user => {
+          return new Promise((res, rej) => {
+            const dataPromises = dates.map(date => {
+              return new Promise((r, rj) => {
+                db.get(
+                  `SELECT 
+                     (SUM(CASE WHEN status = 'approved' THEN happn_accounts ELSE 0 END) + 
+                      SUM(CASE WHEN status = 'approved' THEN leads_converted ELSE 0 END)) AS total
+                   FROM reports
+                   WHERE user_id = ? AND report_date = ?`,
+                  [user.id, date],
+                  (e, row) => e ? rj(e) : r(row ? row.total || 0 : 0)
+                );
+              });
+            });
+            
+            Promise.all(dataPromises)
+              .then(data => res({ username: user.username, data }))
+              .catch(rej);
+          });
+        });
+        
+        Promise.all(userPromises)
+          .then(users => resolve({ dates, users }))
+          .catch(reject);
+      }
+    );
+  });
+}
+
+export function getAchievements() {
+  return new Promise((resolve, reject) => {
+    const achievements = [];
+    
+    // Get top performer
+    db.get(
+      `SELECT 
+         users.username,
+         (SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) + 
+          SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END)) AS total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id
+       GROUP BY users.id
+       ORDER BY total DESC
+       LIMIT 1`,
+      (err, topUser) => {
+        if (err) return reject(err);
+        
+        if (topUser && topUser.total > 0) {
+          achievements.push({
+            icon: '🏆',
+            title: 'Топ исполнитель',
+            description: `${topUser.username} лидирует с ${topUser.total} выполненными задачами!`
+          });
+        }
+        
+        // Get most consistent
+        db.get(
+          `SELECT 
+             users.username,
+             COUNT(DISTINCT reports.report_date) AS days_active
+           FROM users
+           LEFT JOIN reports ON reports.user_id = users.id AND reports.status = 'approved'
+           GROUP BY users.id
+           ORDER BY days_active DESC
+           LIMIT 1`,
+          (err2, consistent) => {
+            if (err2) return reject(err2);
+            
+            if (consistent && consistent.days_active > 5) {
+              achievements.push({
+                icon: '🔥',
+                title: 'Самый стабильный',
+                description: `${consistent.username} работал ${consistent.days_active} дней подряд!`
+              });
+            }
+            
+            // Get team total
+            db.get(
+              `SELECT 
+                 (SUM(CASE WHEN status = 'approved' THEN happn_accounts ELSE 0 END) + 
+                  SUM(CASE WHEN status = 'approved' THEN leads_converted ELSE 0 END)) AS team_total
+               FROM reports`,
+              (err3, teamStats) => {
+                if (err3) return reject(err3);
+                
+                if (teamStats && teamStats.team_total > 100) {
+                  achievements.push({
+                    icon: '🎯',
+                    title: 'Командное достижение',
+                    description: `Команда выполнила ${teamStats.team_total} задач вместе!`
+                  });
+                }
+                
+                resolve(achievements);
+              }
+            );
+          }
+        );
+      }
+    );
+  });
+}
