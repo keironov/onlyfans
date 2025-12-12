@@ -69,10 +69,15 @@ if (BOT_TOKEN && WEBHOOK_URL) {
         const username = msg.from.username ? `@${msg.from.username}` : `${msg.from.first_name || ''} ${msg.from.last_name || ''}`.trim();
         const user = await db.ensureUserByTelegram(String(msg.chat.id), username, username);
 
+        // Get current date in YYYY-MM-DD format
+        const now = new Date();
+        const reportDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
         // add pending report
         await db.addReport({
           user_id: user.id,
           text: msg.text,
+          report_date: reportDate,
           created_at: Date.now()
         });
 
@@ -130,6 +135,16 @@ app.post('/api/users/:id/role', async (req, res) => {
   }
 });
 
+app.post('/api/users/:id/instagram', async (req, res) => {
+  try {
+    const { instagram } = req.body;
+    const user = await db.updateUserInstagram(req.params.id, instagram);
+    res.json({ ok: true, user });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 app.delete('/api/users/:id', async (req, res) => {
   try {
     await db.deleteUser(req.params.id);
@@ -139,11 +154,32 @@ app.delete('/api/users/:id', async (req, res) => {
   }
 });
 
-app.get('/api/users/:id/stats', async (req, res) => {
+// --- MANAGER NOTES ---
+
+app.get('/api/notes/:userId', async (req, res) => {
   try {
-    const stats = await db.getUserDetailedStats(req.params.id);
-    if (!stats) return res.json({ ok: false, error: 'User not found' });
-    res.json({ ok: true, stats });
+    const notes = await db.listManagerNotes(req.params.userId);
+    res.json({ ok: true, notes });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.post('/api/notes/add', async (req, res) => {
+  try {
+    const { user_id, note } = req.body;
+    if (!user_id || !note) return res.json({ ok: false, error: 'Missing fields' });
+    const newNote = await db.addManagerNote({ user_id, note });
+    res.json({ ok: true, note: newNote });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.delete('/api/notes/:id', async (req, res) => {
+  try {
+    await db.deleteManagerNote(req.params.id);
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -162,8 +198,8 @@ app.get('/api/reports', async (req, res) => {
 
 app.post('/api/reports/:id/approve', async (req, res) => {
   try {
-    const { number = 0, type = '' } = req.body;
-    await db.updateReportStatus(req.params.id, 'approved', number, type);
+    const { happn_accounts = 0, leads_converted = 0, report_date = null } = req.body;
+    await db.updateReportStatus(req.params.id, 'approved', happn_accounts, leads_converted, report_date);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -183,31 +219,22 @@ app.post('/api/reports/:id/reject', async (req, res) => {
 
 app.get('/api/stats/global', async (req, res) => {
   try {
-    const period = req.query.period || 'today';
-    const reports = await db.listReports();
-
-    let fromTime = 0;
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    switch (period) {
-      case 'today': fromTime = start.getTime(); break;
-      case 'yesterday': fromTime = start.getTime() - 86400000; break;
-      case 'week': fromTime = start.getTime() - 7 * 86400000; break;
-      case 'month': fromTime = start.getTime() - 30 * 86400000; break;
-      default: fromTime = 0;
+    const { startDate, endDate } = req.query;
+    
+    let stats;
+    if (startDate && endDate) {
+      stats = await db.getStatsByDateRange(startDate, endDate);
+    } else {
+      stats = await db.getDetailedStats();
     }
-
-    const filtered = reports.filter(r => r.status === 'approved' && (r.created_at || 0) >= fromTime);
-
-    const data = { happn: 0, instagram: 0, lid: 0 };
-    filtered.forEach(r => {
-      if (r.type && r.number) {
-        const t = r.type;
-        data[t] = (data[t] || 0) + (parseInt(r.number) || 0);
-      }
-    });
-
-    res.json({ ok: true, data });
+    
+    const totals = {
+      happn: stats.reduce((sum, s) => sum + (s.happn_total || 0), 0),
+      leads: stats.reduce((sum, s) => sum + (s.leads_total || 0), 0),
+      users: stats.length
+    };
+    
+    res.json({ ok: true, data: totals });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -216,6 +243,38 @@ app.get('/api/stats/global', async (req, res) => {
 app.get('/api/stats/detailed', async (req, res) => {
   try {
     const stats = await db.getDetailedStats();
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/by-date', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    if (!startDate || !endDate) {
+      return res.json({ ok: false, error: 'startDate and endDate required' });
+    }
+    const stats = await db.getStatsByDateRange(startDate, endDate);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/by-user/:userId', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const stats = await db.getStatsByUser(req.params.userId, startDate, endDate);
+    res.json({ ok: true, stats });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/daily/:date', async (req, res) => {
+  try {
+    const stats = await db.getDailyStats(req.params.date);
     res.json({ ok: true, stats });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -240,13 +299,20 @@ app.get('/api/stats/growth/team', async (req, res) => {
   }
 });
 
-app.get('/api/stats/growth/:type', async (req, res) => {
+app.get('/api/stats/growth/happn', async (req, res) => {
   try {
-    const type = req.params.type;
-    if (!['happn', 'instagram', 'lid'].includes(type)) {
-      return res.json({ ok: false, error: 'Invalid type' });
-    }
-    const growth = await db.getConversionGrowth(type);
+    const { startDate, endDate } = req.query;
+    const growth = await db.getHappnGrowth(startDate, endDate);
+    res.json({ ok: true, growth });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+app.get('/api/stats/growth/leads', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const growth = await db.getLeadsGrowth(startDate, endDate);
     res.json({ ok: true, growth });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -257,15 +323,6 @@ app.get('/api/stats/absences', async (req, res) => {
   try {
     const ranking = await db.getAbsenceRanking();
     res.json({ ok: true, ranking });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-app.get('/api/stats/happn-accounts', async (req, res) => {
-  try {
-    const stats = await db.getHappnAccountStats();
-    res.json({ ok: true, stats });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -290,7 +347,7 @@ app.post('/api/feedback/send', async (req, res) => {
   }
 });
 
-// --- WORK LOGS (BLOG) ---
+// --- WORK LOGS ---
 
 app.get('/api/worklogs', async (req, res) => {
   try {
@@ -333,106 +390,76 @@ app.post('/api/insights/generate', async (req, res) => {
     const insights = [];
 
     if (user_id) {
-      // Generate insights for specific user
       const user = stats.find(u => u.id === parseInt(user_id));
       if (user) {
-        const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
-        const happnAccounts = user.happn_accounts_created || 0;
-        const avgPerDay = happnAccounts > 0 ? (happnAccounts / 7).toFixed(1) : 0;
-
-        // Check Happn account creation rate
-        if (happnAccounts < 70) { // Less than 10 per day average
-          insights.push({
-            content: `${user.username}: Создано только ${happnAccounts} аккаунтов Happn за последние 7 дней (средн. ${avgPerDay}/день). Норма 10/день. Рекомендуется поговорить с сотрудником о причинах снижения продуктивности.`,
-            category: 'warning',
-            user_id: user.id
-          });
-        } else if (happnAccounts >= 70 && happnAccounts < 100) {
-          insights.push({
-            content: `${user.username}: Хорошая работа! Создано ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Близко к норме 10/день.`,
-            category: 'success',
-            user_id: user.id
-          });
-        } else if (happnAccounts >= 100) {
-          insights.push({
-            content: `${user.username}: Отличная работа! 🏆 Создано ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Превышает норму! Рекомендуется премия.`,
-            category: 'success',
-            user_id: user.id
-          });
-        }
-
-        // Check conversion rate
-        const conversionRate = happnAccounts > 0 ? ((totalConverted / happnAccounts) * 100).toFixed(1) : 0;
-        if (conversionRate > 15) {
-          insights.push({
-            content: `${user.username}: Отличная конверсия ${conversionRate}%! Высокое качество работы с переводом на Instagram.`,
-            category: 'success',
-            user_id: user.id
-          });
-        } else if (conversionRate < 5 && happnAccounts > 20) {
-          insights.push({
-            content: `${user.username}: Низкая конверсия ${conversionRate}%. Создано ${happnAccounts} аккаунтов, но мало переводов (${totalConverted}). Нужна помощь с техникой перевода на Instagram.`,
-            category: 'improvement',
-            user_id: user.id
-          });
-        }
-
-        // Check Instagram performance
-        const instagramRatio = totalConverted > 0 ? ((user.instagram_total || 0) / totalConverted * 100).toFixed(0) : 0;
-        if (instagramRatio > 60) {
-          insights.push({
-            content: `${user.username}: ${instagramRatio}% конверсий через Instagram. Отлично работает с ИИ-чатботом!`,
-            category: 'performance',
-            user_id: user.id
-          });
+        const happnAccounts = user.happn_total || 0;
+        const leads = user.leads_total || 0;
+        
+        // Role-based insights
+        if (user.role === 'Трафер') {
+          if (leads < 10) {
+            insights.push({
+              content: `${user.username} (Трафер): Всего ${leads} лидов. Норма 10 лидов. Требуется улучшение.`,
+              category: 'warning',
+              user_id: user.id
+            });
+          } else {
+            insights.push({
+              content: `${user.username} (Трафер): Отлично! ${leads} лидов. Норма выполнена! 🎯`,
+              category: 'success',
+              user_id: user.id
+            });
+          }
+          
+          if (!user.instagram_username) {
+            insights.push({
+              content: `${user.username} (Трафер): ⚠️ Не указан Instagram аккаунт. Обязательно для роли Трафер!`,
+              category: 'warning',
+              user_id: user.id
+            });
+          }
+        } else if (user.role === 'Новичок Трафер') {
+          const dailyAvg = happnAccounts / 7;
+          if (dailyAvg < 5) {
+            insights.push({
+              content: `${user.username} (Новичок): ${happnAccounts} аккаунтов Happn за неделю (средн. ${dailyAvg.toFixed(1)}/день). Норма 5/день.`,
+              category: 'improvement',
+              user_id: user.id
+            });
+          } else {
+            insights.push({
+              content: `${user.username} (Новичок): Хорошая работа! ${happnAccounts} аккаунтов (средн. ${dailyAvg.toFixed(1)}/день). 👍`,
+              category: 'success',
+              user_id: user.id
+            });
+          }
         }
       }
     } else {
-      // Generate global insights
+      // Global insights
       stats.forEach(user => {
-        const totalConverted = (user.happn_total || 0) + (user.instagram_total || 0) + (user.lid_total || 0);
-        const happnAccounts = user.happn_accounts_created || 0;
-        const avgPerDay = happnAccounts > 0 ? (happnAccounts / 7).toFixed(1) : 0;
-
-        // Check Happn account creation rate
-        if (happnAccounts < 70 && happnAccounts > 0) {
+        const happnAccounts = user.happn_total || 0;
+        const leads = user.leads_total || 0;
+        
+        if (user.role === 'Трафер' && leads < 10) {
           insights.push({
-            content: `${user.username}: Создано только ${happnAccounts} аккаунтов Happn за неделю (средн. ${avgPerDay}/день). Норма 10/день. Требуется разговор.`,
+            content: `${user.username} (Трафер): ${leads} лидов. Не выполнена норма (10 лидов).`,
             category: 'warning',
             user_id: user.id
           });
-        } else if (happnAccounts >= 100) {
-          insights.push({
-            content: `${user.username}: Топ-перформер! 🏆 ${happnAccounts} аккаунтов Happn (средн. ${avgPerDay}/день). Рекомендуется премия!`,
-            category: 'success',
-            user_id: user.id
-          });
         }
-
-        // Check conversion rate
-        const conversionRate = happnAccounts > 0 ? ((totalConverted / happnAccounts) * 100).toFixed(1) : 0;
-        if (conversionRate < 5 && happnAccounts > 20) {
+        
+        if (user.role === 'Новичок Трафер' && happnAccounts < 35) {
           insights.push({
-            content: `${user.username}: Низкая конверсия ${conversionRate}%. Нужна помощь с техникой перевода на Instagram.`,
+            content: `${user.username} (Новичок): ${happnAccounts} аккаунтов за неделю. Норма 5/день (35/неделю).`,
             category: 'improvement',
             user_id: user.id
           });
         }
       });
-
-      // Global team insights
-      const totalUsers = stats.length;
-      const activeUsers = stats.filter(u => (u.happn_accounts_created || 0) > 0).length;
-      if (activeUsers < totalUsers * 0.5) {
-        insights.push({
-          content: `Только ${activeUsers} из ${totalUsers} создают аккаунты Happn. Рекомендуется провести встречу с неактивными членами команды.`,
-          category: 'team',
-          user_id: null
-        });
-      }
     }
 
-    // Save insights to database
+    // Save insights
     for (const insight of insights) {
       await db.addInsight(insight);
     }

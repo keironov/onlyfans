@@ -14,24 +14,33 @@ export function init() {
         username TEXT UNIQUE,
         display_name TEXT,
         role TEXT DEFAULT '',
+        instagram_username TEXT DEFAULT '',
         created_at INTEGER DEFAULT 0
       )
     `);
 
-    // Reports table with happn_accounts_created field
+    // Reports table with enhanced fields
     db.run(`
       CREATE TABLE IF NOT EXISTS reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         text TEXT,
-        task_type TEXT,
-        length INTEGER,
-        suspicious INTEGER,
+        report_date TEXT,
         created_at INTEGER,
         status TEXT DEFAULT 'pending',
-        number INTEGER DEFAULT 0,
-        type TEXT DEFAULT '',
-        happn_accounts_created INTEGER DEFAULT 0,
+        happn_accounts INTEGER DEFAULT 0,
+        leads_converted INTEGER DEFAULT 0,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+
+    // Manager notes table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS manager_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        note TEXT,
+        created_at INTEGER,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -49,7 +58,7 @@ export function init() {
       )
     `);
 
-    // Work log table (Blog feature)
+    // Work log table
     db.run(`
       CREATE TABLE IF NOT EXISTS work_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,7 +71,7 @@ export function init() {
       )
     `);
 
-    // Insights/recommendations table with user_id
+    // Insights table
     db.run(`
       CREATE TABLE IF NOT EXISTS insights (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +141,21 @@ export function updateUserRole(userId, role) {
   });
 }
 
+export function updateUserInstagram(userId, instagram) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `UPDATE users SET instagram_username = ? WHERE id = ?`,
+      [instagram, userId],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM users WHERE id = ?`, [userId], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
 export function deleteUser(userId) {
   return new Promise((resolve, reject) => {
     db.run(`DELETE FROM users WHERE id = ?`, [userId], (err) =>
@@ -158,16 +182,12 @@ export function listUsers() {
 
 // === REPORTS ===
 
-export function addReport({ user_id, text, created_at }) {
+export function addReport({ user_id, text, report_date, created_at }) {
   return new Promise((resolve, reject) => {
-    const length = text ? text.length : 0;
-    const suspicious = length < 5 ? 1 : 0;
-    const task_type = length < 20 ? 'short' : 'long';
-
     db.run(
-      `INSERT INTO reports (user_id, text, task_type, length, suspicious, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [user_id, text, task_type, length, suspicious, created_at],
+      `INSERT INTO reports (user_id, text, report_date, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [user_id, text, report_date, created_at],
       function (err) {
         if (err) return reject(err);
         db.get(`SELECT reports.*, users.username FROM reports LEFT JOIN users ON users.id = reports.user_id WHERE reports.id = ?`, [this.lastID], (e, r) =>
@@ -181,7 +201,7 @@ export function addReport({ user_id, text, created_at }) {
 export function listReports(limit = 1000) {
   return new Promise((resolve, reject) => {
     db.all(
-      `SELECT reports.*, users.username 
+      `SELECT reports.*, users.username, users.instagram_username
        FROM reports 
        LEFT JOIN users ON users.id = reports.user_id
        ORDER BY reports.id DESC 
@@ -192,49 +212,64 @@ export function listReports(limit = 1000) {
   });
 }
 
-export function listReportsForUser(user_id, limit = 200) {
+export function updateReportStatus(id, status, happn_accounts = 0, leads_converted = 0, report_date = null) {
+  return new Promise((resolve, reject) => {
+    let query = `UPDATE reports SET status = ?, happn_accounts = ?, leads_converted = ?`;
+    let params = [status, happn_accounts, leads_converted];
+    
+    if (report_date) {
+      query += `, report_date = ?`;
+      params.push(report_date);
+    }
+    
+    query += ` WHERE id = ?`;
+    params.push(id);
+    
+    db.run(query, params, function (err) {
+      if (err) return reject(err);
+      db.get(
+        `SELECT reports.*, users.username, users.instagram_username
+         FROM reports
+         LEFT JOIN users ON users.id = reports.user_id
+         WHERE reports.id = ?`,
+        [id],
+        (e, row) => (e ? reject(e) : resolve(row))
+      );
+    });
+  });
+}
+
+// === MANAGER NOTES ===
+
+export function addManagerNote({ user_id, note }) {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `INSERT INTO manager_notes (user_id, note, created_at) VALUES (?, ?, ?)`,
+      [user_id, note, Date.now()],
+      function (err) {
+        if (err) return reject(err);
+        db.get(`SELECT * FROM manager_notes WHERE id = ?`, [this.lastID], (e, r) =>
+          e ? reject(e) : resolve(r)
+        );
+      }
+    );
+  });
+}
+
+export function listManagerNotes(userId) {
   return new Promise((resolve, reject) => {
     db.all(
-      `SELECT * FROM reports WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
-      [user_id, limit],
+      `SELECT * FROM manager_notes WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId],
       (err, rows) => (err ? reject(err) : resolve(rows))
     );
   });
 }
 
-export function summaryForUser(user_id) {
+export function deleteManagerNote(noteId) {
   return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT 
-         COUNT(*) AS total,
-         SUM(length) AS total_length,
-         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious
-       FROM reports
-       WHERE user_id = ?`,
-      [user_id],
-      (err, row) => (err ? reject(err) : resolve(row))
-    );
-  });
-}
-
-export function updateReportStatus(id, status, number = 0, type = '') {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `UPDATE reports 
-       SET status = ?, number = ?, type = ? 
-       WHERE id = ?`,
-      [status, number, type, id],
-      function (err) {
-        if (err) return reject(err);
-        db.get(
-          `SELECT reports.*, users.username
-           FROM reports
-           LEFT JOIN users ON users.id = reports.user_id
-           WHERE reports.id = ?`,
-          [id],
-          (e, row) => (e ? reject(e) : resolve(row))
-        );
-      }
+    db.run(`DELETE FROM manager_notes WHERE id = ?`, [noteId], (err) =>
+      err ? reject(err) : resolve({ ok: true })
     );
   });
 }
@@ -270,7 +305,7 @@ export function listFeedback() {
   });
 }
 
-// === WORK LOGS (BLOG) ===
+// === WORK LOGS ===
 
 export function addWorkLog({ user_id, date, status, reason }) {
   return new Promise((resolve, reject) => {
@@ -316,16 +351,6 @@ export function listWorkLogsByDate(date) {
   });
 }
 
-export function getWorkLogForUserDate(user_id, date) {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT * FROM work_logs WHERE user_id = ? AND date = ?`,
-      [user_id, date],
-      (err, row) => (err ? reject(err) : resolve(row))
-    );
-  });
-}
-
 // === INSIGHTS ===
 
 export function addInsight({ content, category, user_id }) {
@@ -358,20 +383,6 @@ export function listInsights(limit = 50) {
 
 // === STATISTICS ===
 
-export function globalSummary() {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT 
-         COUNT(*) AS reports_total,
-         SUM(length) AS total_length,
-         SUM(CASE WHEN suspicious = 1 THEN 1 ELSE 0 END) AS suspicious_total
-       FROM reports
-       WHERE status = 'approved'`,
-      (err, row) => (err ? reject(err) : resolve(row))
-    );
-  });
-}
-
 export function getDetailedStats() {
   return new Promise((resolve, reject) => {
     db.all(
@@ -379,19 +390,62 @@ export function getDetailedStats() {
          users.id,
          users.username,
          users.role,
+         users.instagram_username,
          COUNT(reports.id) AS total_reports,
          SUM(CASE WHEN reports.status = 'approved' THEN 1 ELSE 0 END) AS approved_reports,
          SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
-         SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
-         SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
-         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total,
-         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS happn_accounts_created
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total
        FROM users
        LEFT JOIN reports ON reports.user_id = users.id
        GROUP BY users.id
        ORDER BY approved_reports DESC`,
       (err, rows) => (err ? reject(err) : resolve(rows))
     );
+  });
+}
+
+export function getStatsByDateRange(startDate, endDate) {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `SELECT 
+         users.id,
+         users.username,
+         users.role,
+         users.instagram_username,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_total,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_total
+       FROM users
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date >= ? AND reports.report_date <= ?
+       GROUP BY users.id
+       ORDER BY happn_total DESC`,
+      [startDate, endDate],
+      (err, rows) => (err ? reject(err) : resolve(rows))
+    );
+  });
+}
+
+export function getStatsByUser(userId, startDate = null, endDate = null) {
+  return new Promise((resolve, reject) => {
+    let query = `
+      SELECT 
+        reports.report_date,
+        SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_accounts,
+        SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_converted
+      FROM reports
+      WHERE reports.user_id = ?
+    `;
+    
+    let params = [userId];
+    
+    if (startDate && endDate) {
+      query += ` AND reports.report_date >= ? AND reports.report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY reports.report_date ORDER BY reports.report_date DESC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 }
 
@@ -421,19 +475,49 @@ export function getTeamGrowth() {
   });
 }
 
-export function getConversionGrowth(type) {
+export function getHappnGrowth(startDate = null, endDate = null) {
   return new Promise((resolve, reject) => {
-    db.all(
-      `SELECT 
-         DATE(created_at / 1000, 'unixepoch') as date,
-         SUM(number) as total
-       FROM reports
-       WHERE status = 'approved' AND type = ?
-       GROUP BY date
-       ORDER BY date ASC`,
-      [type],
-      (err, rows) => (err ? reject(err) : resolve(rows))
-    );
+    let query = `
+      SELECT 
+        report_date as date,
+        SUM(happn_accounts) as total
+      FROM reports
+      WHERE status = 'approved'
+    `;
+    
+    let params = [];
+    
+    if (startDate && endDate) {
+      query += ` AND report_date >= ? AND report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY report_date ORDER BY report_date ASC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
+  });
+}
+
+export function getLeadsGrowth(startDate = null, endDate = null) {
+  return new Promise((resolve, reject) => {
+    let query = `
+      SELECT 
+        report_date as date,
+        SUM(leads_converted) as total
+      FROM reports
+      WHERE status = 'approved'
+    `;
+    
+    let params = [];
+    
+    if (startDate && endDate) {
+      query += ` AND report_date >= ? AND report_date <= ?`;
+      params.push(startDate, endDate);
+    }
+    
+    query += ` GROUP BY report_date ORDER BY report_date ASC`;
+    
+    db.all(query, params, (err, rows) => (err ? reject(err) : resolve(rows)));
   });
 }
 
@@ -456,42 +540,20 @@ export function getAbsenceRanking() {
   });
 }
 
-export function getUserDetailedStats(userId) {
-  return new Promise((resolve, reject) => {
-    db.get(
-      `SELECT 
-         users.id,
-         users.username,
-         users.display_name,
-         users.role,
-         COUNT(reports.id) AS total_reports,
-         SUM(CASE WHEN reports.status = 'approved' THEN 1 ELSE 0 END) AS approved_reports,
-         SUM(CASE WHEN reports.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_reports,
-         SUM(CASE WHEN reports.type = 'happn' THEN reports.number ELSE 0 END) AS happn_total,
-         SUM(CASE WHEN reports.type = 'instagram' THEN reports.number ELSE 0 END) AS instagram_total,
-         SUM(CASE WHEN reports.type = 'lid' THEN reports.number ELSE 0 END) AS lid_total,
-         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS happn_accounts_created
-       FROM users
-       LEFT JOIN reports ON reports.user_id = users.id
-       WHERE users.id = ?
-       GROUP BY users.id`,
-      [userId],
-      (err, row) => (err ? reject(err) : resolve(row))
-    );
-  });
-}
-
-export function getHappnAccountStats() {
+export function getDailyStats(date) {
   return new Promise((resolve, reject) => {
     db.all(
       `SELECT 
+         users.id,
          users.username,
-         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-7 days') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS accounts_last_week,
-         SUM(CASE WHEN reports.status = 'approved' AND reports.created_at >= strftime('%s', 'now', '-1 day') * 1000 THEN reports.happn_accounts_created ELSE 0 END) AS accounts_today
+         users.instagram_username,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.happn_accounts ELSE 0 END) AS happn_accounts,
+         SUM(CASE WHEN reports.status = 'approved' THEN reports.leads_converted ELSE 0 END) AS leads_converted
        FROM users
-       LEFT JOIN reports ON reports.user_id = users.id
+       LEFT JOIN reports ON reports.user_id = users.id AND reports.report_date = ?
        GROUP BY users.id
-       ORDER BY accounts_last_week DESC`,
+       ORDER BY happn_accounts DESC`,
+      [date],
       (err, rows) => (err ? reject(err) : resolve(rows))
     );
   });
